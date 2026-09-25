@@ -1,0 +1,23 @@
+{
+  "$schema": "https://rork.com/schema/rork.json",
+  "apps": [
+    {
+      "name": "TransFit",
+      "path": "ios",
+      "framework": "swift",
+      "settings": {
+        "displayName": "FTM: Fitness & Nutrition"
+      }
+    },
+    {
+      "name": "TransFit Website",
+      "path": "web",
+      "framework": "web"
+    },
+    {
+      "name": "Backend",
+      "path": "backend",
+      "framework": "supabase"
+    }
+  ]
+}
