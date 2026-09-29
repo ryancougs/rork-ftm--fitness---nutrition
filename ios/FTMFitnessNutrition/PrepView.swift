@@ -17,11 +17,11 @@ struct PrepView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if store.isPremium {
+                if store.isPremiumPlus {
                     memberHub
                 } else {
                     ScrollView {
-                        PaywallContentView()
+                        PaywallContentView(context: .prepTeam)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 16)
                     }

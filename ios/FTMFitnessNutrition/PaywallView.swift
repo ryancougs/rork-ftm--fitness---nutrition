@@ -6,72 +6,125 @@
 import SwiftUI
 import RevenueCat
 
-/// Paywall for the Prep Team bodybuilding membership.
+/// Three-tier paywall (Free / Premium / Premium+).
 ///
-/// Renders the packages of the RevenueCat "default" (current) offering —
-/// monthly and yearly — with purchase, restore, and graceful states for
-/// store setup in progress. The shared content is also embedded in the
-/// Prep Team tab (see `PrepView`).
+/// - Monthly/Annual toggle with annual preselected and a computed savings badge
+/// - Tier cards; Premium+ marked "Best Value" (hidden until its packages exist)
+/// - Every price comes from RevenueCat package data (localized) — never hardcoded
+/// - Trial copy from the package's introductory offer ("7 days free, then …")
+/// - Restore Purchases + Terms/Privacy links (App Store requirement)
+/// - Optional `context` headline so gated taps open the paywall mid-story
 struct PaywallView: View {
+    var context: PaywallContext? = nil
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                PaywallContentView(onPurchased: { dismiss() })
+                PaywallContentView(context: context, onPurchased: { dismiss() })
                     .padding(.horizontal, 16)
                     .padding(.vertical, 16)
             }
             .background(TF.bg.ignoresSafeArea())
-            .navigationTitle("Prep Team")
+            .navigationTitle("Upgrade")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
+                        .foregroundStyle(TF.blue)
                 }
             }
         }
     }
 }
 
-/// The paywall body shared by the Coach sheet and the Prep Team tab.
-/// Calls `onPurchased` after a successful activation (the sheet dismisses;
-/// the tab just re-renders into the member hub).
+/// The paywall body, shared by the sheet, the post-onboarding offer, and the
+/// Prep Team tab (embedded without a NavigationStack).
 struct PaywallContentView: View {
+    var context: PaywallContext? = nil
     var onPurchased: () -> Void = {}
 
     @Environment(StoreService.self) private var store
 
-    @State private var selectedPackage: Package?
+    private enum Period { case monthly, annual }
+    private enum Plan { case premium, plus }
+
+    @State private var period: Period = .annual
+    @State private var plan: Plan = .premium
     @State private var isPurchasing: Bool = false
     @State private var isRestoring: Bool = false
     @State private var errorMessage: String?
     @State private var showError: Bool = false
     @State private var showRestoreResult: Bool = false
 
-    private let order: [PackageType] = [.monthly, .annual]
+    // MARK: Package resolution
 
-    private var packages: [Package] {
-        guard let offering = store.currentOffering else { return [] }
-        return offering.availablePackages
-            .filter { order.contains($0.packageType) }
-            .sorted {
-                (order.firstIndex(of: $0.packageType) ?? .max) < (order.firstIndex(of: $1.packageType) ?? .max)
-            }
+    private var selectedPackage: Package? {
+        switch (plan, period) {
+        case (.premium, .monthly): return store.premiumMonthlyPackage
+        case (.premium, .annual): return store.premiumAnnualPackage
+        case (.plus, .monthly): return store.plusMonthlyPackage
+        case (.plus, .annual): return store.plusAnnualPackage
+        }
+    }
+
+    private var hasAnyPackages: Bool {
+        store.premiumMonthlyPackage != nil || store.premiumAnnualPackage != nil || store.hasPlusPackages
+    }
+
+    /// Annual savings vs 12 × monthly, from live RevenueCat prices.
+    private var annualSavingsPercent: Int? {
+        guard let monthlyPackage = store.premiumMonthlyPackage?.storeProduct.price,
+              let annualPackage = store.premiumAnnualPackage?.storeProduct.price else { return nil }
+        let monthly = NSDecimalNumber(decimal: monthlyPackage).doubleValue
+        let annual = NSDecimalNumber(decimal: annualPackage).doubleValue
+        let full = monthly * 12
+        guard full > 0, annual > 0, annual < full else { return nil }
+        return Int(((1 - annual / full) * 100).rounded())
+    }
+
+    /// "7 days free, then $49.99/year. Cancel anytime." — built from the
+    /// package's introductory offer so wording always matches the store data.
+    private var trialLine: String? {
+        guard let package = selectedPackage else { return nil }
+        let product = package.storeProduct
+        guard let intro = product.introductoryDiscount,
+              intro.paymentMode == .freeTrial else { return nil }
+        let value = intro.subscriptionPeriod.value
+        let unitWord: String
+        switch intro.subscriptionPeriod.unit {
+        case .day: unitWord = value == 1 ? "day" : "days"
+        case .week: unitWord = value == 1 ? "week" : "weeks"
+        case .month: unitWord = value == 1 ? "month" : "months"
+        case .year: unitWord = value == 1 ? "year" : "years"
+        @unknown default: unitWord = "days"
+        }
+        let cycleWord = product.subscriptionPeriod?.unit == .year ? "year" : "month"
+        return "\(value) \(unitWord) free, then \(product.localizedPriceString)/\(cycleWord). Cancel anytime."
     }
 
     var body: some View {
         VStack(spacing: 16) {
+            if let context {
+                contextCard(context)
+            }
             header
-            featureList
             if store.isPremium {
                 memberState
             } else if !store.isConfigured {
                 setupState
-            } else if store.isLoadingOffering || packages.isEmpty {
+            } else if !hasAnyPackages {
                 loadingState
             } else {
-                packageCards
+                periodToggle
+                tierCards
+                if let trialLine {
+                    Text(trialLine)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(TF.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 2)
+                }
                 purchaseButton
             }
             restoreButton
@@ -80,7 +133,7 @@ struct PaywallContentView: View {
         .task {
             if store.currentOffering == nil { await store.loadOffering() }
             await store.refreshEntitlements()
-            selectDefaultPackageIfNeeded()
+            pickDefaultsIfNeeded()
         }
         .alert("Something went wrong", isPresented: $showError) {
             Button("OK", role: .cancel) {}
@@ -91,98 +144,160 @@ struct PaywallContentView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(store.isPremium
-                 ? "Welcome back — your Prep Team access is active."
-                 : "No previous membership was found on this Apple ID.")
+                 ? "Welcome back — \(store.tier.displayName) is active on this Apple ID."
+                 : "No previous subscription was found on this Apple ID.")
         }
+    }
+
+    private func pickDefaultsIfNeeded() {
+        if !store.hasPlusPackages { plan = .premium }
+        if store.premiumAnnualPackage == nil && store.plusAnnualPackage != nil { period = .monthly }
     }
 
     // MARK: Header
 
     private var header: some View {
-        TFHeroBanner {
-            VStack(spacing: 10) {
-                Image("AppLogo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 64, height: 64)
-                Text("TransFit Prep Team")
-                    .font(.title2.weight(.bold))
-                Text("Your complete 12-month bodybuilding prep — coach programming, members-only updates, and white-glove support from Mason.")
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.88))
+        VStack(spacing: 6) {
+            Image("AppLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 56, height: 56)
+            Text("TransFit Premium")
+                .font(.title2.weight(.bold))
+            Text("No ads, ever. Your data stays yours. Upgrade when you're ready for more.")
+                .font(.subheadline)
+                .foregroundStyle(TF.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func contextCard(_ context: PaywallContext) -> some View {
+        TFCard(background: TF.blue.opacity(0.12)) {
+            VStack(spacing: 4) {
+                Text(context.headline)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(TF.text)
                     .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+                if !context.message.isEmpty {
+                    Text(context.message)
+                        .font(.footnote)
+                        .foregroundStyle(TF.textSecondary)
+                        .multilineTextAlignment(.center)
+                }
             }
             .frame(maxWidth: .infinity)
         }
     }
 
-    private var featureList: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            TFSectionHeader(title: "What's included")
-            VStack(alignment: .leading, spacing: 10) {
-                featureRow("calendar.badge.checkmark", "Full 12-month contest prep programming")
-                featureRow("person.2.wave.2.fill", "White-glove coaching and check-in reviews")
-                featureRow("lock.open.fill", "All members-only coach updates, unlocked")
-                featureRow("fork.knife", "Prep and off-season nutrition guidance")
-                featureRow("figure.strengthtraining.traditional", "Training built for trans masculine bodies")
-            }
-            .padding(14)
-            .background(RoundedRectangle(cornerRadius: TF.cornerM).fill(TF.card))
+    // MARK: Period toggle
+
+    private var periodToggle: some View {
+        HStack(spacing: 8) {
+            periodButton(.monthly, title: "Monthly", badge: nil)
+            periodButton(.annual, title: "Annual", badge: annualSavingsPercent.map { "Save \($0)%" })
         }
     }
 
-    private func featureRow(_ icon: String, _ text: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: icon)
-                .font(.subheadline)
-                .foregroundStyle(TF.blue)
-                .frame(width: 22)
-            Text(text)
-                .font(.footnote)
-                .foregroundStyle(TF.text)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    // MARK: Packages
-
-    private var packageCards: some View {
-        VStack(spacing: 10) {
-            ForEach(packages, id: \.identifier) { package in
-                packageCard(package)
-            }
-        }
-    }
-
-    private func packageCard(_ package: Package) -> some View {
-        let isSelected = selectedPackage?.identifier == package.identifier
+    private func periodButton(_ value: Period, title: String, badge: String?) -> some View {
+        let isSelected = period == value
         return Button {
-            withAnimation(.spring(response: 0.25)) { selectedPackage = package }
+            withAnimation(.spring(response: 0.25)) { period = value }
         } label: {
-            HStack(spacing: 12) {
-                Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-                    .foregroundStyle(isSelected ? TF.blue : .secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(title(for: package))
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.subheadline.weight(.bold))
+                if let badge {
+                    Text(badge)
+                        .font(.caption2.weight(.bold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(isSelected ? TF.bg.opacity(0.25) : TF.blue.opacity(0.16)))
+                }
+            }
+            .foregroundStyle(isSelected ? TF.bg : TF.text)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 11)
+            .background(Capsule().fill(isSelected ? TF.blue : TF.input))
+            .overlay(Capsule().strokeBorder(isSelected ? TF.blue : TF.border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Tier cards
+
+    private var tierCards: some View {
+        VStack(spacing: 10) {
+            if store.hasPlusPackages {
+                tierCard(.plus)
+            }
+            tierCard(.premium)
+        }
+    }
+
+    private func tierCard(_ value: Plan) -> some View {
+        let isSelected = plan == value
+        let package = packageFor(value: value, period: period)
+        return Button {
+            withAnimation(.spring(response: 0.25)) { plan = value }
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                        .foregroundStyle(isSelected ? TF.blue : TF.textSecondary)
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 6) {
+                            Text(value == .plus ? "Premium+" : "Premium")
+                                .font(.headline.weight(.bold))
+                            if value == .plus {
+                                Text("Best Value")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(TF.bg)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 2)
+                                    .background(Capsule().fill(TF.pink))
+                            }
+                        }
+                        Text(value == .plus ? "Everything in Premium, plus Mason's Prep Team" : "Core tools to train and fuel consistently")
+                            .font(.caption)
+                            .foregroundStyle(TF.textSecondary)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text(package.map { $0.storeProduct.localizedPriceString } ?? "—")
                             .font(.subheadline.weight(.bold))
                             .foregroundStyle(TF.text)
-                        if package.packageType == .annual {
-                            badge("Best value", color: TF.blue)
+                        Text(period == .annual ? "per year" : "per month")
+                            .font(.caption2)
+                            .foregroundStyle(TF.textSecondary)
+                    }
+                }
+                if period == .annual, let package {
+                    Text(perMonthCaption(package))
+                        .font(.caption2)
+                        .foregroundStyle(TF.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, 30)
+                }
+                VStack(alignment: .leading, spacing: 7) {
+                    ForEach(Array(featureList(for: value).enumerated()), id: \.offset) { _, feature in
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "checkmark")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(TF.blue)
+                                .padding(.top, 2)
+                            Text(feature)
+                                .font(.footnote)
+                                .foregroundStyle(TF.text)
+                                .multilineTextAlignment(.leading)
                         }
                     }
-                    Text(caption(for: package))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
-                Spacer()
-                Text(package.storeProduct.localizedPriceString)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(TF.text)
+                .padding(.leading, 30)
             }
             .padding(14)
-            .background(RoundedRectangle(cornerRadius: TF.cornerM).fill(isSelected ? TF.blue.opacity(0.12) : TF.card))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: TF.cornerM).fill(isSelected ? TF.blue.opacity(0.10) : TF.card))
             .overlay(
                 RoundedRectangle(cornerRadius: TF.cornerM)
                     .strokeBorder(isSelected ? TF.blue : TF.border, lineWidth: isSelected ? 2 : 1)
@@ -191,41 +306,42 @@ struct PaywallContentView: View {
         .buttonStyle(.plain)
     }
 
-    private func badge(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.caption2.weight(.bold))
-            .foregroundStyle(color)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(color.opacity(0.14)))
-    }
-
-    private func title(for package: Package) -> String {
-        switch package.packageType {
-        case .monthly: return "Monthly"
-        case .annual: return "Yearly"
-        default: return package.storeProduct.localizedTitle
+    private func packageFor(value: Plan, period: Period) -> Package? {
+        switch (value, period) {
+        case (.premium, .monthly): return store.premiumMonthlyPackage
+        case (.premium, .annual): return store.premiumAnnualPackage
+        case (.plus, .monthly): return store.plusMonthlyPackage
+        case (.plus, .annual): return store.plusAnnualPackage
         }
     }
 
-    private func caption(for package: Package) -> String {
-        switch package.packageType {
-        case .monthly:
-            return "Flexible — cancel anytime"
-        case .annual:
-            if let perMonth = perMonthPrice(package.storeProduct) {
-                return "12 months of full prep — that's \(perMonth)/month"
-            }
-            return "12 months of full prep"
-        default:
-            return package.storeProduct.localizedDescription
+    private func perMonthCaption(_ package: Package) -> String {
+        let product = package.storeProduct
+        if product.subscriptionPeriod?.unit == .year {
+            return "That's \(product.localizedPricePerMonth)/month"
         }
+        return ""
     }
 
-    /// Approximate per-month price shown on the yearly option.
-    private func perMonthPrice(_ product: StoreProduct) -> String? {
-        guard product.subscriptionPeriod?.unit == .year else { return nil }
-        return product.localizedPricePerMonth
+    private func featureList(for plan: Plan) -> [String] {
+        switch plan {
+        case .premium:
+            return [
+                "Unlimited AI meal scans",
+                "Barcode scanner + quick-add macros",
+                "Custom calorie & macro goals",
+                "Full history & progress analytics",
+                "All workout programs & routines",
+            ]
+        case .plus:
+            return [
+                "Everything in Premium",
+                "Mason's Prep Team membership",
+                "Members-only coach updates",
+                "12-month prep & off-season programming",
+                "Priority support from Mason",
+            ]
+        }
     }
 
     // MARK: Purchase / restore
@@ -237,11 +353,11 @@ struct PaywallContentView: View {
             HStack(spacing: 8) {
                 if isPurchasing {
                     ProgressView()
-                        .tint(.white)
+                        .tint(TF.bg)
                 } else {
                     Image(systemName: "lock.open.fill")
                 }
-                Text(isPurchasing ? "Processing…" : "Join the Prep Team")
+                Text(ctaTitle)
                     .font(.headline)
             }
             .frame(maxWidth: .infinity)
@@ -249,7 +365,15 @@ struct PaywallContentView: View {
         }
         .buttonStyle(.borderedProminent)
         .tint(TF.blue)
+        .foregroundStyle(TF.bg)
         .disabled(selectedPackage == nil || isPurchasing)
+    }
+
+    private var ctaTitle: String {
+        guard let package = selectedPackage else { return "Continue" }
+        if trialLine != nil { return "Start my free trial" }
+        let word = package.storeProduct.subscriptionPeriod?.unit == .year ? "year" : "month"
+        return "Subscribe — \(package.storeProduct.localizedPriceString)/\(word)"
     }
 
     private var restoreButton: some View {
@@ -287,32 +411,32 @@ struct PaywallContentView: View {
                 if store.isPremium {
                     onPurchased()
                 } else {
-                    errorMessage = "The purchase went through but your membership hasn't activated yet. Try \"Restore purchases\" — if it still doesn't show, contact support."
+                    errorMessage = "The purchase went through but your plan hasn't activated yet. Try \"Restore purchases\" — if it still doesn't show, contact support."
                     showError = true
                 }
             }
         }
     }
 
-    private func selectDefaultPackageIfNeeded() {
-        guard selectedPackage == nil, !packages.isEmpty else { return }
-        selectedPackage = packages.first { $0.packageType == .annual } ?? packages.first
-    }
-
     // MARK: States
 
     private var memberState: some View {
         VStack(spacing: 8) {
-            Image(systemName: "checkmark.seal.fill")
+            Image(systemName: store.tier == .premiumPlus ? "crown.fill" : "checkmark.seal.fill")
                 .font(.system(size: 32))
                 .foregroundStyle(TF.blue)
-            Text("You're a Prep Team member")
+            Text("You're on \(store.tier.displayName)")
                 .font(.headline)
                 .foregroundStyle(TF.text)
-            Text("All members-only coach updates and the bodybuilding prep section are unlocked. Thank you for backing the team.")
+            Text("Everything in your plan is unlocked. Thank you for backing TransFit.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(TF.textSecondary)
                 .multilineTextAlignment(.center)
+            if let renewal = store.renewalSummary {
+                Text(renewal)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(TF.blue)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
@@ -325,12 +449,12 @@ struct PaywallContentView: View {
             Image(systemName: "hourglass")
                 .font(.system(size: 28))
                 .foregroundStyle(TF.blue)
-            Text("Membership launching soon")
+            Text("Premium launching soon")
                 .font(.headline)
                 .foregroundStyle(TF.text)
-            Text("We're finishing App Store setup for the Prep Team. Check back shortly — your free access stays untouched in the meantime.")
+            Text("We're finishing App Store setup for the new plans. Your free access stays untouched in the meantime.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(TF.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -343,9 +467,9 @@ struct PaywallContentView: View {
         VStack(spacing: 10) {
             ProgressView()
                 .tint(TF.blue)
-            Text(store.isLoadingOffering ? "Loading membership options…" : "Membership options aren't available right now. Pull to reopen this page in a moment.")
+            Text(store.isLoadingOffering ? "Loading plans…" : "Plans aren't available right now. Reopen this page in a moment.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(TF.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -358,7 +482,7 @@ struct PaywallContentView: View {
         VStack(spacing: 8) {
             Text("Payment is charged to your Apple ID. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period — manage or cancel anytime in your App Store settings.")
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(TF.textSecondary)
                 .multilineTextAlignment(.center)
             HStack(spacing: 16) {
                 Link("Terms of Use", destination: URL(string: "https://2gxfo9qxolcyjgbzbeaoj-web.rork.live/terms")!)

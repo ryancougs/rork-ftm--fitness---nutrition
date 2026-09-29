@@ -120,12 +120,25 @@ struct TrainView: View {
     private var browseProgramsSection: some View {
         TFSectionHeader(title: "Browse Programs", subtitle: "Sample plans to explore")
             .padding(.top, 8)
-        ForEach(app.programs) { program in
-            NavigationLink(value: program) {
-                ProgramRow(program: program)
+        PremiumGate(
+            requiredTier: .premium,
+            unlocked: {
+                ForEach(app.programs) { program in
+                    NavigationLink(value: program) {
+                        ProgramRow(program: program)
+                    }
+                    .buttonStyle(.plain)
+                }
+            },
+            locked: {
+                LockedFeatureCard(
+                    icon: "dumbbell.fill",
+                    title: "Workout programs & routines",
+                    message: "Unlock every program and routine on top of your own plan. Logging today's session stays free, forever.",
+                    context: .programs
+                )
             }
-            .buttonStyle(.plain)
-        }
+        )
     }
 }
 

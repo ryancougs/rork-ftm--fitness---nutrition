@@ -311,6 +311,7 @@ enum FoodSource: String, Codable, Equatable {
     case openFoodFacts
     case usda
     case custom
+    case aiScan
 
     /// Short badge shown on search rows.
     var badge: String? {
@@ -319,6 +320,7 @@ enum FoodSource: String, Codable, Equatable {
         case .openFoodFacts: "OFF"
         case .usda: "USDA"
         case .custom: "Custom"
+        case .aiScan: "AI"
         }
     }
 }

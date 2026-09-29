@@ -122,6 +122,10 @@ final class AppModel {
     // Active main tab, so Home cards can deep-link into other tabs.
     var selectedTab: AppTab = .home
 
+    /// One-shot dismissible soft offer shown when onboarding completes.
+    /// Consumed by MainTabView; never re-shown for the same completion.
+    var showPostOnboardingPaywall: Bool = false
+
     // Today's date key
     var todayKey: String { Self.dateKey(Date()) }
 
@@ -174,6 +178,7 @@ final class AppModel {
 
     func logOut() {
         session = .unauthenticated
+        showPostOnboardingPaywall = false
         Task { await SupabaseService.shared.signOut() }
     }
 
@@ -197,6 +202,7 @@ final class AppModel {
         recentFoods.removeAll()
         favoriteFoods.removeAll()
         selectedTab = .home
+        showPostOnboardingPaywall = false
         session = .unauthenticated
         save()
     }
@@ -280,6 +286,7 @@ final class AppModel {
         regeneratePlan()
         hasCompletedOnboarding = true
         session = .ready
+        showPostOnboardingPaywall = true
         save()
         Task { await SupabaseService.shared.syncProfile(profile) }
     }

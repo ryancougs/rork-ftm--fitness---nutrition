@@ -12,13 +12,17 @@ import Foundation
 enum Config {
     nonisolated static let EXPO_PUBLIC_REVENUECAT_IOS_API_KEY = ""
     nonisolated static let EXPO_PUBLIC_REVENUECAT_TEST_API_KEY = ""
+    nonisolated static let EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY = ""
     nonisolated static let EXPO_PUBLIC_SUPABASE_ANON_KEY = ""
     nonisolated static let EXPO_PUBLIC_SUPABASE_URL = ""
+    nonisolated static let EXPO_PUBLIC_TOOLKIT_URL = ""
 
     nonisolated static let allValues: [String: String] = [
         "EXPO_PUBLIC_REVENUECAT_IOS_API_KEY": EXPO_PUBLIC_REVENUECAT_IOS_API_KEY,
         "EXPO_PUBLIC_REVENUECAT_TEST_API_KEY": EXPO_PUBLIC_REVENUECAT_TEST_API_KEY,
+        "EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY": EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY,
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": EXPO_PUBLIC_SUPABASE_ANON_KEY,
         "EXPO_PUBLIC_SUPABASE_URL": EXPO_PUBLIC_SUPABASE_URL,
+        "EXPO_PUBLIC_TOOLKIT_URL": EXPO_PUBLIC_TOOLKIT_URL,
     ]
 }

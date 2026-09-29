@@ -16,6 +16,7 @@ struct NutritionView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     summaryCard
+                    historySection
                     dateHeader
                     ForEach(MealType.allCases) { meal in
                         mealSection(meal)
@@ -107,6 +108,64 @@ struct NutritionView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 10).fill(color.opacity(0.10)))
+    }
+
+    // MARK: Last 7 days (free) + full history (Premium)
+
+    private var historySection: some View {
+        VStack(spacing: 10) {
+            TFCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("Last 7 days")
+                            .font(.headline.weight(.bold))
+                        Spacer()
+                        Text("calories vs goal")
+                            .font(.caption)
+                            .foregroundStyle(TF.textSecondary)
+                    }
+                    sevenDayBars
+                }
+            }
+            LockedFeatureCard(
+                icon: "chart.line.uptrend.xyaxis",
+                title: "Full history & progress analytics",
+                message: "Unlock complete weight, macro, and strength trends with unlimited lookback.",
+                context: .fullHistory
+            )
+        }
+    }
+
+    /// Simple 7-day calorie bars — free users see one week of history.
+    private var sevenDayBars: some View {
+        let cal = Calendar.current
+        let target = max(Double(app.profile.targetCalories), 1)
+        let today = cal.startOfDay(for: Date())
+        let days: [(label: String, value: Double)] = stride(from: 6, through: 0, by: -1).compactMap { offset in
+            guard let date = cal.date(byAdding: .day, value: -offset, to: today) else { return nil }
+            let value = app.nutritionTotals(on: date).cal
+            let idx = cal.component(.weekday, from: date)
+            let label = String(cal.veryShortWeekdaySymbols[idx - 1].prefix(1))
+            return (label, value)
+        }
+        return HStack(alignment: .bottom, spacing: 8) {
+            ForEach(Array(days.enumerated()), id: \.offset) { idx, day in
+                VStack(spacing: 4) {
+                    ZStack(alignment: .bottom) {
+                        Capsule().fill(TF.input)
+                        Capsule()
+                            .fill(day.value > 0 ? TF.blue : Color.clear)
+                            .frame(height: max(5, 56 * min(day.value / target, 1)))
+                    }
+                    .frame(height: 56)
+                    Text(day.label)
+                        .font(.caption2.weight(idx == days.count - 1 ? .bold : .regular))
+                        .foregroundStyle(idx == days.count - 1 ? TF.text : TF.textSecondary)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .frame(height: 78)
     }
 
     // MARK: Date header
@@ -243,9 +302,10 @@ struct NutritionView: View {
 
 struct AddFoodSheet: View {
     @Environment(AppModel.self) private var app
+    @Environment(StoreService.self) private var store
     @Environment(\.dismiss) private var dismiss
 
-    private enum Mode { case search, configure, custom }
+    private enum Mode { case search, configure, custom, quickAdd }
     @State private var mode: Mode = .search
 
     @State private var query: String = ""
@@ -261,6 +321,9 @@ struct AddFoodSheet: View {
     @State private var meal: MealType = .breakfast
 
     @State private var showingScanner: Bool = false
+    @State private var showingMealScanner: Bool = false
+    @State private var showingLimitPaywall: Bool = false
+    @State private var scanRemaining: Int? = nil
     @State private var scanNotice: String? = nil
 
     // Custom food form
@@ -271,6 +334,13 @@ struct AddFoodSheet: View {
     @State private var customProtein: String = ""
     @State private var customCarbs: String = ""
     @State private var customFat: String = ""
+
+    // Quick-add form (Premium)
+    @State private var quickName: String = ""
+    @State private var quickCalories: String = ""
+    @State private var quickProtein: String = ""
+    @State private var quickCarbs: String = ""
+    @State private var quickFat: String = ""
 
     var body: some View {
         NavigationStack {
@@ -284,6 +354,8 @@ struct AddFoodSheet: View {
                     }
                 case .custom:
                     customFoodForm
+                case .quickAdd:
+                    quickAddForm
                 }
             }
             .background(TF.bg.ignoresSafeArea())
@@ -310,6 +382,24 @@ struct AddFoodSheet: View {
                     Task { await lookupBarcode(code) }
                 }
             }
+            .sheet(isPresented: $showingMealScanner) {
+                MealScannerView { foods, meal in
+                    for food in foods {
+                        app.addFood(food, servings: 1, meal: meal)
+                    }
+                }
+            }
+            .sheet(isPresented: $showingLimitPaywall) {
+                PaywallView(context: .scanLimit)
+            }
+            .task {
+                guard !store.isPremium else { return }
+                scanRemaining = await MealScanService.shared.remainingScans()
+            }
+            .onChange(of: showingMealScanner) { _, isShowing in
+                guard !isShowing, !store.isPremium else { return }
+                Task { scanRemaining = await MealScanService.shared.remainingScans() }
+            }
         }
     }
 
@@ -318,6 +408,7 @@ struct AddFoodSheet: View {
         case .search: "Add food"
         case .configure: "Log serving"
         case .custom: "Custom food"
+        case .quickAdd: "Quick add"
         }
     }
 
@@ -382,23 +473,103 @@ struct AddFoodSheet: View {
     }
 
     private var quickActions: some View {
-        HStack(spacing: 10) {
-            quickButton("Scan barcode", systemImage: "viewfinder") {
-                scanNotice = nil
-                showingScanner = true
-            }
-            quickButton("Custom food", systemImage: "square.and.pencil") {
-                dismissKeyboard()
-                withAnimation(.easeOut(duration: 0.15)) { mode = .custom }
+        VStack(spacing: 10) {
+            scanMealButton
+            HStack(spacing: 10) {
+                GatedButton(requiredTier: .premium, context: .barcodeScanner) {
+                    scanNotice = nil
+                    showingScanner = true
+                } label: {
+                    quickLabel("Barcode", systemImage: "viewfinder")
+                }
+                GatedButton(requiredTier: .premium, context: .quickAdd) {
+                    dismissKeyboard()
+                    withAnimation(.easeOut(duration: 0.15)) { mode = .quickAdd }
+                } label: {
+                    quickLabel("Quick add", systemImage: "bolt.fill")
+                }
+                quickButton("Custom food", systemImage: "square.and.pencil") {
+                    dismissKeyboard()
+                    withAnimation(.easeOut(duration: 0.15)) { mode = .custom }
+                }
             }
         }
         .padding(.horizontal, 16)
     }
 
+    /// Free-tier AI meal scan entry: shows remaining weekly scans and opens
+    /// the paywall with scan-limit context once the allotment is used.
+    private var scanMealButton: some View {
+        Button {
+            scanNotice = nil
+            if !store.isPremium && scanRemaining == 0 {
+                showingLimitPaywall = true
+            } else {
+                showingMealScanner = true
+            }
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(TF.blue.opacity(0.16))
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "camera.viewfinder")
+                        .foregroundStyle(TF.blue)
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Scan a meal")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(TF.text)
+                    Text(scanMealSubtitle)
+                        .font(.caption2)
+                        .foregroundStyle(TF.textSecondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(TF.textSecondary)
+            }
+            .padding(.vertical, 12)
+            .padding(.horizontal, 14)
+            .background(RoundedRectangle(cornerRadius: TF.cornerM).fill(TF.blue.opacity(0.10)))
+            .overlay(
+                RoundedRectangle(cornerRadius: TF.cornerM)
+                    .strokeBorder(TF.blue.opacity(0.35), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var scanMealSubtitle: String {
+        if store.isPremium { return "Unlimited — AI reads calories & macros from a photo" }
+        if let remaining = scanRemaining {
+            if remaining == 0 { return "Free scans used this week — go unlimited" }
+            return "\(remaining) free scan\(remaining == 1 ? "" : "s") left this week"
+        }
+        return "3 free scans a week — AI reads the plate for you"
+    }
+
+    /// Compact label style shared by the three quick-action buttons.
+    private func quickLabel(_ title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(TF.blue)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: TF.cornerM)
+                    .fill(TF.input)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: TF.cornerM)
+                    .strokeBorder(TF.border, lineWidth: 1)
+            )
+    }
+
     private func quickButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
-                .font(.subheadline.weight(.semibold))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(TF.blue)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
@@ -995,6 +1166,63 @@ struct AddFoodSheet: View {
             brand: customBrand.trimmingCharacters(in: .whitespaces).isEmpty
                 ? nil
                 : customBrand.trimmingCharacters(in: .whitespaces),
+            source: .custom
+        )
+        app.addFood(food, servings: 1, meal: meal)
+        dismiss()
+    }
+
+    // MARK: Quick add (Premium)
+
+    private var quickAddIsValid: Bool {
+        (Double(quickCalories) ?? 0) > 0 || (Double(quickProtein) ?? 0) > 0
+    }
+
+    private var quickAddForm: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                TFCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        customField("Name (optional)", text: $quickName, placeholder: "Quick add")
+                        Text("Log calories and macros directly — no food lookup needed.")
+                            .font(.caption)
+                            .foregroundStyle(TF.textSecondary)
+                    }
+                }
+                TFCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Macros")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(TF.text)
+                        HStack(spacing: 10) {
+                            customNumberField("kcal", text: $quickCalories)
+                            customNumberField("P g", text: $quickProtein)
+                            customNumberField("C g", text: $quickCarbs)
+                            customNumberField("F g", text: $quickFat)
+                        }
+                    }
+                }
+                mealPicker
+                TFButton(title: "Add to log", systemImage: "plus.circle.fill", style: .primary) {
+                    addQuickAdd()
+                }
+                .disabled(!quickAddIsValid)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 16)
+        }
+        .scrollDismissesKeyboard(.immediately)
+    }
+
+    private func addQuickAdd() {
+        let name = quickName.trimmingCharacters(in: .whitespaces)
+        let food = FoodItem(
+            name: name.isEmpty ? "Quick add" : name,
+            serving: "1 entry",
+            calories: Int(Double(quickCalories) ?? 0),
+            protein: Int(Double(quickProtein) ?? 0),
+            carbs: Int(Double(quickCarbs) ?? 0),
+            fat: Int(Double(quickFat) ?? 0),
             source: .custom
         )
         app.addFood(food, servings: 1, meal: meal)

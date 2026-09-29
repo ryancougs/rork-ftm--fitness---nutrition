@@ -8,6 +8,8 @@ import SwiftUI
 /// Profile tab: user goal, stats, editable targets, settings.
 struct ProfileView: View {
     @Environment(AppModel.self) private var app
+    @Environment(StoreService.self) private var store
+    @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
     @State private var showingEditProfile = false
     @State private var showingEditTargets = false
@@ -16,6 +18,8 @@ struct ProfileView: View {
     @State private var showingDeleteConfirmation = false
     @State private var showingDeleteError = false
     @State private var deletionErrorMessage = ""
+    @State private var isRestoringPurchases = false
+    @State private var showingPaywall = false
 
     var body: some View {
         @Bindable var app = app
@@ -27,6 +31,7 @@ struct ProfileView: View {
                     statsCard
                     targetsCard
                     settingsSection
+                    subscriptionSection
                     developerSection
                 }
                 .padding(.horizontal, 16)
@@ -208,7 +213,7 @@ struct ProfileView: View {
                     Text("Nutrition targets")
                         .font(.headline.weight(.bold))
                     Spacer()
-                    Button {
+                    GatedButton(requiredTier: .premium, context: .customGoals) {
                         showingEditTargets = true
                     } label: {
                         Text("Edit")
@@ -241,6 +246,94 @@ struct ProfileView: View {
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(color)
         }
+    }
+
+    // MARK: Subscription
+
+    @ViewBuilder
+    private var subscriptionSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TFSectionHeader(title: "Subscription")
+                .padding(.horizontal, 4)
+                .padding(.top, 8)
+            TFCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            Circle()
+                                .fill(TF.blue.opacity(0.16))
+                                .frame(width: 34, height: 34)
+                            Image(systemName: store.tier.icon)
+                                .foregroundStyle(TF.blue)
+                                .font(.footnote)
+                        }
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(store.tier.displayName)
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(TF.text)
+                            if let renewal = store.renewalSummary {
+                                Text(renewal)
+                                    .font(.caption)
+                                    .foregroundStyle(TF.textSecondary)
+                            } else if store.tier == .free {
+                                Text("Free forever — no ads")
+                                    .font(.caption)
+                                    .foregroundStyle(TF.textSecondary)
+                            }
+                        }
+                        Spacer()
+                    }
+                    Divider()
+                    if store.isPremium {
+                        Button {
+                            isRestoringPurchases = true
+                            Task { @MainActor in
+                                await store.restore()
+                                isRestoringPurchases = false
+                            }
+                        } label: {
+                            subscriptionRow("arrow.clockwise", "Restore purchases")
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isRestoringPurchases)
+                        Divider()
+                        Button {
+                            openURL(URL(string: "itms-apps://apps.apple.com/account/subscriptions")!)
+                        } label: {
+                            subscriptionRow("gearshape.fill", "Manage subscription")
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        Button {
+                            showingPaywall = true
+                        } label: {
+                            subscriptionRow("star.fill", "Upgrade to Premium")
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .sheet(isPresented: $showingPaywall) {
+                PaywallView()
+            }
+        }
+    }
+
+    private func subscriptionRow(_ icon: String, _ title: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.footnote)
+                .foregroundStyle(TF.blue)
+                .frame(width: 22)
+            Text(title)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(TF.text)
+            Spacer()
+            Image(systemName: "chevron.right")
+                .foregroundStyle(.tertiary)
+                .font(.caption)
+        }
+        .contentShape(Rectangle())
     }
 
     // MARK: Developer (hidden testing tools)

@@ -13,8 +13,10 @@ import UIKit
 /// so scroll position and state survive switching.
 struct MainTabView: View {
     @Environment(AppModel.self) private var app
+    @Environment(StoreService.self) private var store
 
     var body: some View {
+        @Bindable var app = app
         ZStack {
             ForEach(AppTab.allCases, id: \.self) { tab in
                 tabContent(tab)
@@ -27,6 +29,12 @@ struct MainTabView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) { tabBar }
         .tint(TF.blue)
         .animation(.easeInOut(duration: 0.15), value: app.selectedTab)
+        // Dismissible soft offer right after onboarding completes — shown at
+        // most once per session (the store caps unprompted paywalls).
+        .sheet(isPresented: $app.showPostOnboardingPaywall) {
+            PaywallView(context: .postOnboarding)
+                .onAppear { store.markAutoPaywallShown() }
+        }
     }
 
     @ViewBuilder

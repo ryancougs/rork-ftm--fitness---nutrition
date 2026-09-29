@@ -189,7 +189,7 @@ struct CoachView: View {
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(TF.text)
                 if update.isPremium {
-                    if store.isPremium {
+                    if store.isPremiumPlus {
                         Text(update.body)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
