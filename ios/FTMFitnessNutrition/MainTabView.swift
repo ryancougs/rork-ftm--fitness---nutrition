@@ -6,11 +6,10 @@
 import SwiftUI
 import UIKit
 
-/// Bottom navigation across Home, Train, Nutrition, Community, Coach, and
-/// Prep Team. A custom bar keeps all six tabs visible on every screen size
-/// (the system bar would collapse the 6th into "More"). Selection lives in
-/// AppModel so screens can deep-link between tabs; all tab views stay alive
-/// so scroll position and state survive switching.
+/// Bottom navigation across Home, Train, Nutrition, Community, and Profile.
+/// A custom bar keeps all five tabs visible on every screen size. Selection
+/// lives in AppModel so screens can deep-link between tabs; all tab views
+/// stay alive so scroll position and state survive switching.
 struct MainTabView: View {
     @Environment(AppModel.self) private var app
     @Environment(StoreService.self) private var store
@@ -44,8 +43,7 @@ struct MainTabView: View {
         case .train: TrainView()
         case .eat: NutritionView()
         case .community: CommunityView()
-        case .coach: CoachView()
-        case .prep: PrepView()
+        case .profile: ProfileView()
         }
     }
 

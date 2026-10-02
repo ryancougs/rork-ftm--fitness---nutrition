@@ -6,16 +6,16 @@
 import Foundation
 import RevenueCat
 
-/// Owns the RevenueCat connection and the three-tier subscription state.
+/// Owns the RevenueCat connection and the subscription state.
 ///
 /// This is the single source of truth for entitlements — every gated feature
-/// reads `tier`/`isPremium`/`isPremiumPlus` from here (the SwiftUI equivalent
-/// of a useSubscription() hook; `@Observable` keeps views reactive).
+/// reads `tier`/`isPremium` from here (the SwiftUI equivalent of a
+/// useSubscription() hook; `@Observable` keeps views reactive).
 ///
-/// Entitlements in RevenueCat:
+/// Two tiers — Free and Premium. Entitlements in RevenueCat:
 /// - `premium`      → SubscriptionTier.premium
-/// - `premium_plus` → SubscriptionTier.premiumPlus (also passes every premium check)
-/// - `ftm_pro`      → legacy Prep Team membership, grandfathered to premiumPlus
+/// - `premium_plus` → SubscriptionTier.premium (legacy Premium+ subscribers keep full access)
+/// - `ftm_pro`      → SubscriptionTier.premium (legacy Prep Team members keep full access)
 @MainActor
 @Observable
 final class StoreService {
@@ -41,8 +41,6 @@ final class StoreService {
     static let defaultOfferingID = "default"
     static let premiumMonthlyID = "premium_monthly"
     static let premiumAnnualID = "premium_annual"
-    static let plusMonthlyID = "plus_monthly"
-    static let plusAnnualID = "plus_annual"
 
     // MARK: State
 
@@ -53,7 +51,6 @@ final class StoreService {
     private(set) var renewalSummary: String?
 
     var isPremium: Bool { tier != .free }
-    var isPremiumPlus: Bool { tier == .premiumPlus }
     var isConfigured: Bool { !Self.apiKey.isEmpty && Purchases.isConfigured }
 
     /// Unprompted paywalls (e.g. the post-onboarding soft offer) show at most
@@ -131,17 +128,6 @@ final class StoreService {
         package(identifiers: [Self.premiumAnnualID], fallbackTypes: [.annual])
     }
 
-    var plusMonthlyPackage: Package? {
-        package(identifiers: [Self.plusMonthlyID])
-    }
-
-    var plusAnnualPackage: Package? {
-        package(identifiers: [Self.plusAnnualID])
-    }
-
-    /// Premium+ cards only render when its packages exist in the offering.
-    var hasPlusPackages: Bool { plusMonthlyPackage != nil || plusAnnualPackage != nil }
-
     // MARK: Purchase / restore
 
     /// Starts a purchase. Returns true when the purchase completed (not cancelled).
@@ -182,13 +168,14 @@ final class StoreService {
     // MARK: Entitlement mapping
 
     private func apply(_ info: CustomerInfo) {
-        if info.entitlements[Self.premiumPlusEntitlementID]?.isActive == true {
-            tier = .premiumPlus
-        } else if info.entitlements[Self.premiumEntitlementID]?.isActive == true {
+        let active = info.entitlements
+        // Two tiers: `premium` unlocks Premium. `premium_plus` and the legacy
+        // `ftm_pro` entitlement also map to Premium — active Premium+ and Prep
+        // Team subscribers keep full access and display as Premium.
+        if active[Self.premiumEntitlementID]?.isActive == true
+            || active[Self.premiumPlusEntitlementID]?.isActive == true
+            || active[Self.legacyEntitlementID]?.isActive == true {
             tier = .premium
-        } else if info.entitlements[Self.legacyEntitlementID]?.isActive == true {
-            // Legacy Prep Team members keep full Premium+ access.
-            tier = .premiumPlus
         } else {
             tier = .free
         }

@@ -8,7 +8,7 @@ import SwiftUI
 /// Main tab selection, hoisted here so Home cards can deep-link
 /// into other tabs (e.g. "start today's workout" → Train).
 enum AppTab: Hashable, CaseIterable {
-    case home, train, eat, community, coach, prep
+    case home, train, eat, community, profile
 
     var label: String {
         switch self {
@@ -16,8 +16,7 @@ enum AppTab: Hashable, CaseIterable {
         case .train: "Train"
         case .eat: "Nutrition"
         case .community: "Community"
-        case .coach: "Coach"
-        case .prep: "Prep Team"
+        case .profile: "Profile"
         }
     }
 
@@ -27,8 +26,7 @@ enum AppTab: Hashable, CaseIterable {
         case .train: "dumbbell.fill"
         case .eat: "fork.knife"
         case .community: "person.3.fill"
-        case .coach: "person.crop.circle.badge.checkmark"
-        case .prep: "trophy.fill"
+        case .profile: "person.crop.circle"
         }
     }
 }

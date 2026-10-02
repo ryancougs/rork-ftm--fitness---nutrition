@@ -9,6 +9,7 @@ import SwiftUI
 /// moderation built in. Posts show a chosen display name, never an email.
 struct CommunityView: View {
     @Environment(AppModel.self) private var app
+    @Environment(StoreService.self) private var store
 
     @State private var posts: [SupabaseService.CommunityPost] = []
     @State private var isLoading: Bool = true
@@ -18,6 +19,8 @@ struct CommunityView: View {
     @State private var reportingPost: SupabaseService.CommunityPost? = nil
     @State private var deletingPost: SupabaseService.CommunityPost? = nil
     @State private var reportSubmitted = false
+    @State private var coachCategory: CoachCategory? = nil
+    @State private var showingCoachPaywall = false
 
     private let reportReasons = [
         "Harassment or hate",
@@ -31,6 +34,7 @@ struct CommunityView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
+                    coachSection
                     headerCard
                     guidelinesCard
                     if isLoading {
@@ -53,6 +57,9 @@ struct CommunityView: View {
             .refreshable { await load() }
             .background(TF.bg.ignoresSafeArea())
             .navigationTitle("Community")
+            .sheet(isPresented: $showingCoachPaywall) {
+                PaywallView(context: .coachUpdates)
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -135,6 +142,136 @@ struct CommunityView: View {
                 posts.removeAll { $0.id == post.id }
             } catch {
                 print("Delete failed: \(error)")
+            }
+        }
+    }
+
+    // MARK: From Coach Mason (pinned)
+
+    private var allCoachCategories: [CoachCategory?] {
+        [nil] + CoachCategory.allCases
+    }
+
+    private var filteredCoachUpdates: [CoachUpdate] {
+        let updates = app.coachUpdates.sorted { $0.date > $1.date }
+        if let cat = coachCategory {
+            return updates.filter { $0.category == cat }
+        }
+        return updates
+    }
+
+    private var coachSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image("CoachMason")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 44, height: 44)
+                    .clipShape(Circle())
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("From Coach Mason")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(TF.text)
+                    Text("Updates from Mason, pinned to the top")
+                        .font(.caption)
+                        .foregroundStyle(TF.textSecondary)
+                }
+                Spacer()
+            }
+            coachCategoryFilter
+            ForEach(filteredCoachUpdates) { update in
+                coachUpdateCard(update)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var coachCategoryFilter: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(allCoachCategories, id: \.self) { cat in
+                    coachCategoryChip(cat)
+                }
+            }
+        }
+    }
+
+    private func coachCategoryLabel(_ cat: CoachCategory?) -> String {
+        if let cat { "\(cat.emoji) \(cat.rawValue)" }
+        else { "All" }
+    }
+
+    @ViewBuilder
+    private func coachCategoryChip(_ cat: CoachCategory?) -> some View {
+        let isSelected = coachCategory == cat
+        Button {
+            withAnimation(.spring(response: 0.3)) { coachCategory = cat }
+        } label: {
+            Text(coachCategoryLabel(cat))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(isSelected ? TF.bg : TF.text)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background {
+                    if isSelected {
+                        Capsule().fill(TF.blue)
+                    } else {
+                        Capsule().fill(TF.input)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func coachUpdateCard(_ update: CoachUpdate) -> some View {
+        TFCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("\(update.category.emoji) \(update.category.rawValue)")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(TF.blue)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(TF.blue.opacity(0.18)))
+                    Spacer()
+                    Text(update.date.relativeDescription)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Text(update.title)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(TF.text)
+                if update.isPremium, !store.isPremium {
+                    Button {
+                        showingCoachPaywall = true
+                    } label: {
+                        VStack(spacing: 8) {
+                            Text(update.body)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(3)
+                                .blur(radius: 3)
+                            HStack {
+                                Image(systemName: "lock.fill")
+                                Text("Premium members only — tap to unlock")
+                                    .multilineTextAlignment(.leading)
+                            }
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(TF.pink)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 12)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(TF.pink.opacity(0.10)))
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text(update.body)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                }
             }
         }
     }
@@ -443,5 +580,7 @@ struct ComposePostSheet: View {
 }
 
 #Preview {
-    CommunityView().environment(AppModel())
+    CommunityView()
+        .environment(AppModel())
+        .environment(StoreService.shared)
 }

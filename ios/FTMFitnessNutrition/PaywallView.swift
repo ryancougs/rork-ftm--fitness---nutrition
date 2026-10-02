@@ -6,10 +6,10 @@
 import SwiftUI
 import RevenueCat
 
-/// Three-tier paywall (Free / Premium / Premium+).
+/// Two-tier paywall (Free / Premium).
 ///
 /// - Monthly/Annual toggle with annual preselected and a computed savings badge
-/// - Tier cards; Premium+ marked "Best Value" (hidden until its packages exist)
+/// - One Premium card using premium_monthly / premium_annual
 /// - Every price comes from RevenueCat package data (localized) — never hardcoded
 /// - Trial copy from the package's introductory offer ("7 days free, then …")
 /// - Restore Purchases + Terms/Privacy links (App Store requirement)
@@ -38,8 +38,7 @@ struct PaywallView: View {
     }
 }
 
-/// The paywall body, shared by the sheet, the post-onboarding offer, and the
-/// Prep Team tab (embedded without a NavigationStack).
+/// The paywall body, shared by the sheet and the post-onboarding offer.
 struct PaywallContentView: View {
     var context: PaywallContext? = nil
     var onPurchased: () -> Void = {}
@@ -47,10 +46,8 @@ struct PaywallContentView: View {
     @Environment(StoreService.self) private var store
 
     private enum Period { case monthly, annual }
-    private enum Plan { case premium, plus }
 
     @State private var period: Period = .annual
-    @State private var plan: Plan = .premium
     @State private var isPurchasing: Bool = false
     @State private var isRestoring: Bool = false
     @State private var errorMessage: String?
@@ -60,16 +57,14 @@ struct PaywallContentView: View {
     // MARK: Package resolution
 
     private var selectedPackage: Package? {
-        switch (plan, period) {
-        case (.premium, .monthly): return store.premiumMonthlyPackage
-        case (.premium, .annual): return store.premiumAnnualPackage
-        case (.plus, .monthly): return store.plusMonthlyPackage
-        case (.plus, .annual): return store.plusAnnualPackage
+        switch period {
+        case .monthly: return store.premiumMonthlyPackage
+        case .annual: return store.premiumAnnualPackage
         }
     }
 
     private var hasAnyPackages: Bool {
-        store.premiumMonthlyPackage != nil || store.premiumAnnualPackage != nil || store.hasPlusPackages
+        store.premiumMonthlyPackage != nil || store.premiumAnnualPackage != nil
     }
 
     /// Annual savings vs 12 × monthly, from live RevenueCat prices.
@@ -117,7 +112,7 @@ struct PaywallContentView: View {
                 loadingState
             } else {
                 periodToggle
-                tierCards
+                planCard
                 if let trialLine {
                     Text(trialLine)
                         .font(.footnote.weight(.medium))
@@ -150,8 +145,7 @@ struct PaywallContentView: View {
     }
 
     private func pickDefaultsIfNeeded() {
-        if !store.hasPlusPackages { plan = .premium }
-        if store.premiumAnnualPackage == nil && store.plusAnnualPackage != nil { period = .monthly }
+        if store.premiumAnnualPackage == nil { period = .monthly }
     }
 
     // MARK: Header
@@ -224,95 +218,60 @@ struct PaywallContentView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: Tier cards
+    // MARK: Plan card
 
-    private var tierCards: some View {
-        VStack(spacing: 10) {
-            if store.hasPlusPackages {
-                tierCard(.plus)
-            }
-            tierCard(.premium)
-        }
-    }
-
-    private func tierCard(_ value: Plan) -> some View {
-        let isSelected = plan == value
-        let package = packageFor(value: value, period: period)
-        return Button {
-            withAnimation(.spring(response: 0.25)) { plan = value }
-        } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-                        .foregroundStyle(isSelected ? TF.blue : TF.textSecondary)
-                    VStack(alignment: .leading, spacing: 1) {
-                        HStack(spacing: 6) {
-                            Text(value == .plus ? "Premium+" : "Premium")
-                                .font(.headline.weight(.bold))
-                            if value == .plus {
-                                Text("Best Value")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(TF.bg)
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 2)
-                                    .background(Capsule().fill(TF.pink))
-                            }
-                        }
-                        Text(value == .plus ? "Everything in Premium, plus Mason's Prep Team" : "Core tools to train and fuel consistently")
-                            .font(.caption)
-                            .foregroundStyle(TF.textSecondary)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 1) {
-                        Text(package.map { $0.storeProduct.localizedPriceString } ?? "—")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(TF.text)
-                        Text(period == .annual ? "per year" : "per month")
-                            .font(.caption2)
-                            .foregroundStyle(TF.textSecondary)
-                    }
+    private var planCard: some View {
+        let package = selectedPackage
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "star.fill")
+                    .foregroundStyle(TF.blue)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Premium")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(TF.text)
+                    Text("Core tools to train and fuel consistently")
+                        .font(.caption)
+                        .foregroundStyle(TF.textSecondary)
                 }
-                if period == .annual, let package {
-                    Text(perMonthCaption(package))
+                Spacer()
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(package.map { $0.storeProduct.localizedPriceString } ?? "—")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(TF.text)
+                    Text(period == .annual ? "per year" : "per month")
                         .font(.caption2)
                         .foregroundStyle(TF.textSecondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.leading, 30)
                 }
-                VStack(alignment: .leading, spacing: 7) {
-                    ForEach(Array(featureList(for: value).enumerated()), id: \.offset) { _, feature in
-                        HStack(alignment: .top, spacing: 8) {
-                            Image(systemName: "checkmark")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(TF.blue)
-                                .padding(.top, 2)
-                            Text(feature)
-                                .font(.footnote)
-                                .foregroundStyle(TF.text)
-                                .multilineTextAlignment(.leading)
-                        }
+            }
+            if period == .annual, let package {
+                Text(perMonthCaption(package))
+                    .font(.caption2)
+                    .foregroundStyle(TF.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(featureList, id: \.self) { feature in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "checkmark")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(TF.blue)
+                            .padding(.top, 2)
+                        Text(feature)
+                            .font(.footnote)
+                            .foregroundStyle(TF.text)
+                            .multilineTextAlignment(.leading)
                     }
                 }
-                .padding(.leading, 30)
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: TF.cornerM).fill(isSelected ? TF.blue.opacity(0.10) : TF.card))
-            .overlay(
-                RoundedRectangle(cornerRadius: TF.cornerM)
-                    .strokeBorder(isSelected ? TF.blue : TF.border, lineWidth: isSelected ? 2 : 1)
-            )
         }
-        .buttonStyle(.plain)
-    }
-
-    private func packageFor(value: Plan, period: Period) -> Package? {
-        switch (value, period) {
-        case (.premium, .monthly): return store.premiumMonthlyPackage
-        case (.premium, .annual): return store.premiumAnnualPackage
-        case (.plus, .monthly): return store.plusMonthlyPackage
-        case (.plus, .annual): return store.plusAnnualPackage
-        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: TF.cornerM).fill(TF.card))
+        .overlay(
+            RoundedRectangle(cornerRadius: TF.cornerM)
+                .strokeBorder(TF.border, lineWidth: 1)
+        )
     }
 
     private func perMonthCaption(_ package: Package) -> String {
@@ -323,25 +282,14 @@ struct PaywallContentView: View {
         return ""
     }
 
-    private func featureList(for plan: Plan) -> [String] {
-        switch plan {
-        case .premium:
-            return [
-                "Unlimited AI meal scans",
-                "Barcode scanner + quick-add macros",
-                "Custom calorie & macro goals",
-                "Full history & progress analytics",
-                "All workout programs & routines",
-            ]
-        case .plus:
-            return [
-                "Everything in Premium",
-                "Mason's Prep Team membership",
-                "Members-only coach updates",
-                "12-month prep & off-season programming",
-                "Priority support from Mason",
-            ]
-        }
+    private var featureList: [String] {
+        [
+            "Unlimited AI meal scans",
+            "Barcode scanner + quick-add macros",
+            "Custom calorie & macro goals",
+            "Full history & progress analytics",
+            "All workout programs & routines",
+        ]
     }
 
     // MARK: Purchase / restore
@@ -422,7 +370,7 @@ struct PaywallContentView: View {
 
     private var memberState: some View {
         VStack(spacing: 8) {
-            Image(systemName: store.tier == .premiumPlus ? "crown.fill" : "checkmark.seal.fill")
+            Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 32))
                 .foregroundStyle(TF.blue)
             Text("You're on \(store.tier.displayName)")

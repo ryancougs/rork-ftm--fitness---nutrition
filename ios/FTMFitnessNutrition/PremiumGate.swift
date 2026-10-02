@@ -5,12 +5,11 @@
 
 import SwiftUI
 
-/// The three subscription tiers. Ordered so `tier >= .premium` means "Premium
-/// or better" and Premium+ subscribers pass every Premium check.
+/// The two subscription tiers. Free users get logging and three AI meal
+/// scans a week; Premium unlocks everything else.
 enum SubscriptionTier: Int, Comparable, CaseIterable {
     case free = 0
     case premium = 1
-    case premiumPlus = 2
 
     static func < (lhs: SubscriptionTier, rhs: SubscriptionTier) -> Bool {
         lhs.rawValue < rhs.rawValue
@@ -20,7 +19,6 @@ enum SubscriptionTier: Int, Comparable, CaseIterable {
         switch self {
         case .free: "Free"
         case .premium: "Premium"
-        case .premiumPlus: "Premium+"
         }
     }
 
@@ -28,7 +26,6 @@ enum SubscriptionTier: Int, Comparable, CaseIterable {
         switch self {
         case .free: "person.crop.circle"
         case .premium: "star.fill"
-        case .premiumPlus: "crown.fill"
         }
     }
 }
@@ -38,12 +35,10 @@ enum SubscriptionTier: Int, Comparable, CaseIterable {
 struct PaywallContext: Equatable {
     var headline: String
     var message: String
-    var highlightTier: SubscriptionTier = .premium
 
-    init(headline: String, message: String = "", highlightTier: SubscriptionTier = .premium) {
+    init(headline: String, message: String = "") {
         self.headline = headline
         self.message = message
-        self.highlightTier = highlightTier
     }
 }
 
@@ -165,8 +160,7 @@ extension PaywallContext {
     static let postOnboarding = PaywallContext(
         headline: "You're all set up",
         message: "Premium unlocks unlimited AI meal scans, the barcode scanner, and custom goals. Free logging stays free — no ads, ever.")
-    static let prepTeam = PaywallContext(
-        headline: "Mason's Prep Team",
-        message: "Members-only coach updates, 12-month prep programming, and priority support — plus everything in Premium.",
-        highlightTier: .premiumPlus)
+    static let coachUpdates = PaywallContext(
+        headline: "Mason's premium updates are part of Premium",
+        message: "Unlock every locked coach update, plus unlimited AI meal scans and the barcode scanner.")
 }

@@ -487,18 +487,3 @@ struct MasonTip: Identifiable, Codable, Equatable, Hashable {
     }
 }
 
-// MARK: - Coming soon features
-
-struct ComingSoonFeature: Identifiable, Codable, Equatable, Hashable {
-    let id: UUID
-    var title: String
-    var description: String
-    var icon: String         // SF Symbol name
-    var isFree: Bool
-
-    init(id: UUID = UUID(), title: String, description: String,
-         icon: String, isFree: Bool = true) {
-        self.id = id; self.title = title; self.description = description
-        self.icon = icon; self.isFree = isFree
-    }
-}

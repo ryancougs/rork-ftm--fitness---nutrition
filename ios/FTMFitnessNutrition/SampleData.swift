@@ -393,18 +393,6 @@ enum SampleData {
         return tips[(dayOfYear - 1) % tips.count]
     }
 
-    // MARK: - Coming soon features
-
-    static let comingSoon: [ComingSoonFeature] = [
-        ComingSoonFeature(title: "Group Chat", description: "Connect with the FTMFitnessNutrition community in real time. Find your people.", icon: "bubble.left.and.bubble.right.fill"),
-        ComingSoonFeature(title: "Gym Buddies", description: "Find training partners near you. Never lift alone unless you want to.", icon: "mappin.and.ellipse"),
-        ComingSoonFeature(title: "Cookbook & Recipes", description: "Mason's whole-food recipes optimized for your goals and macros.", icon: "book.closed.fill"),
-        ComingSoonFeature(title: "Pre/Post-Surgery Guides", description: "PDF nutrition and training guides built around top surgery — before and after.", icon: "heart.text.clipboard"),
-        ComingSoonFeature(title: "Body Fat Estimator", description: "Estimate body composition from photos and stats. Not a replacement for DEXA, but a useful trend tracker.", icon: "figure.body.scan"),
-        ComingSoonFeature(title: "Contests & Giveaways", description: "Community challenges, transformation contests, and giveaways. Stay tuned.", icon: "gift.fill"),
-        ComingSoonFeature(title: "White Glove Coaching", description: "Take your physique to the next level with 1-1 coaching — full contest prep and off-season blocks with Mason.", icon: "crown.fill", isFree: false),
-    ]
-
     // MARK: - Week start helper
 
     /// Returns the Monday of the current week.
