@@ -376,11 +376,6 @@ struct MealScannerView: View {
         }
         phase = .analyzing
         Task {
-            let allowance = await MealScanService.shared.consumeScan()
-            guard allowance.allowed else {
-                phase = .limitReached
-                return
-            }
             guard let image = UIImage(data: data) else {
                 phase = .failed("Couldn't read that photo. Try again.")
                 return
@@ -391,8 +386,11 @@ struct MealScannerView: View {
                 return
             }
             do {
-                let foods = try await MealScanService.shared.analyze(imageData: jpeg)
+                // The server consumes (and refunds on failure) the free scan.
+                let foods = try await MealScanService.shared.scan(imageData: jpeg)
                 phase = .results(foods)
+            } catch MealScanService.MealScanError.limitReached {
+                phase = .limitReached
             } catch {
                 phase = .failed(error.localizedDescription)
             }

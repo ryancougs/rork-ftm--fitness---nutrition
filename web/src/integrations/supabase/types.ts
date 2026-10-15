@@ -14,7 +14,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.15"
   }
   public: {
     Tables: {
@@ -314,7 +314,9 @@ export type Database = {
     }
     Functions: {
       consume_ai_scan: { Args: never; Returns: number }
+      consume_ai_scan_for: { Args: { p_user_id: string }; Returns: number }
       current_week_start: { Args: never; Returns: string }
+      refund_ai_scan_for: { Args: { p_user_id: string }; Returns: number }
       remaining_ai_scans: { Args: never; Returns: number }
     }
     Enums: {

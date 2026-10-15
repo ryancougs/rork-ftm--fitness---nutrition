@@ -139,6 +139,9 @@ final class AppModel {
         await CheckInReminder.requestAndSchedule()
         defer { isRestoringSession = false }
         guard await SupabaseService.shared.restoreSession() else { return }
+        if let userID = SupabaseService.shared.currentUserID {
+            StoreService.shared.identify(userID: userID)
+        }
         await restoreFromCloud()
     }
 
@@ -153,6 +156,9 @@ final class AppModel {
         p.applyDefaultTargets()
         profile = p
         session = .needsIntake
+        if let userID = SupabaseService.shared.currentUserID {
+            StoreService.shared.identify(userID: userID)
+        }
         save()
     }
 
@@ -170,6 +176,9 @@ final class AppModel {
             favoriteFoods.removeAll()
         }
         profile.email = result.email ?? email
+        if let userID = SupabaseService.shared.currentUserID {
+            StoreService.shared.identify(userID: userID)
+        }
         await restoreFromCloud()
         save()
     }
@@ -177,6 +186,7 @@ final class AppModel {
     func logOut() {
         session = .unauthenticated
         showPostOnboardingPaywall = false
+        StoreService.shared.reset()
         Task { await SupabaseService.shared.signOut() }
     }
 
@@ -187,6 +197,7 @@ final class AppModel {
         if SupabaseService.shared.currentUserID != nil {
             try await SupabaseService.shared.deleteAccount()
         }
+        StoreService.shared.reset()
         wipeLocalData()
     }
 

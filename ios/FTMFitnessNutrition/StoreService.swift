@@ -165,6 +165,37 @@ final class StoreService {
         }
     }
 
+    // MARK: User linking
+
+    /// Links the RevenueCat customer to the signed-in Supabase user's id
+    /// (lowercased UUID). The server-side scanner looks up Premium by this id.
+    func identify(userID: String) {
+        guard Purchases.isConfigured, Purchases.shared.isAnonymous else { return }
+        let appUserID = userID.lowercased()
+        Task {
+            do {
+                let result = try await Purchases.shared.logIn(appUserID)
+                apply(result.customerInfo)
+            } catch {
+                print("RevenueCat login failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Detaches RevenueCat from the signed-out account (back to an anonymous
+    /// customer) so subscriptions don't leak across accounts on one device.
+    func reset() {
+        guard Purchases.isConfigured, !Purchases.shared.isAnonymous else { return }
+        Task {
+            do {
+                let info = try await Purchases.shared.logOut()
+                apply(info)
+            } catch {
+                print("RevenueCat logout failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
     // MARK: Entitlement mapping
 
     private func apply(_ info: CustomerInfo) {
