@@ -16,10 +16,20 @@ func dismissKeyboard() {
 }
 
 extension View {
-    /// Tap anywhere outside a text field to dismiss the keyboard. The gesture
-    /// is simultaneous, so buttons and list rows still receive their taps.
+    /// Tap anywhere outside a text field to dismiss the keyboard.
+    ///
+    /// The gesture lives on a transparent layer BEHIND the screen's content,
+    /// so it can only receive taps on empty space — buttons, cards, and list
+    /// rows are always hit-tested first and never lose their taps. (An
+    /// earlier implementation attached a simultaneous TapGesture to the
+    /// ScrollView itself, which made buttons feel unresponsive and scrolling
+    /// sticky.)
     func dismissKeyboardOnTap() -> some View {
-        simultaneousGesture(TapGesture().onEnded { dismissKeyboard() })
+        background(
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture { dismissKeyboard() }
+        )
     }
 
     /// Adds a Done key above pads that have no return key (decimal/number pads).

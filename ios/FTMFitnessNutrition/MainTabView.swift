@@ -16,34 +16,21 @@ struct MainTabView: View {
 
     var body: some View {
         @Bindable var app = app
-        ZStack {
-            ForEach(AppTab.allCases, id: \.self) { tab in
-                tabContent(tab)
-                    .opacity(app.selectedTab == tab ? 1 : 0)
-                    .allowsHitTesting(app.selectedTab == tab)
-            }
+        TabView(selection: $app.selectedTab) {
+            HomeView().tag(AppTab.home)
+            TrainView().tag(AppTab.train)
+            NutritionView().tag(AppTab.eat)
+            CommunityView().tag(AppTab.community)
+            ProfileView().tag(AppTab.profile)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(TF.bg.ignoresSafeArea())
         .safeAreaInset(edge: .bottom, spacing: 0) { tabBar }
         .tint(TF.blue)
-        .animation(.easeInOut(duration: 0.15), value: app.selectedTab)
         // Dismissible soft offer right after onboarding completes — shown at
         // most once per session (the store caps unprompted paywalls).
         .sheet(isPresented: $app.showPostOnboardingPaywall) {
             PaywallView(context: .postOnboarding)
                 .onAppear { store.markAutoPaywallShown() }
-        }
-    }
-
-    @ViewBuilder
-    private func tabContent(_ tab: AppTab) -> some View {
-        switch tab {
-        case .home: HomeView()
-        case .train: TrainView()
-        case .eat: NutritionView()
-        case .community: CommunityView()
-        case .profile: ProfileView()
         }
     }
 
