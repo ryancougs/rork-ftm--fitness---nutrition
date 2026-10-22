@@ -479,7 +479,10 @@ final class MealPreviewView: UIView {
         let discovery = AVCaptureDevice.DiscoverySession(
             deviceTypes: [.builtInWideAngleCamera, .external],
             mediaType: .video,
-            position: .back
+            // .unspecified matches ALL positions — .back would exclude the
+            // external/Continuity cameras (position .unspecified) that the
+            // cloud preview and desktop webcams report.
+            position: .unspecified
         )
         guard let device = discovery.devices.first,
               let input = try? AVCaptureDeviceInput(device: device),

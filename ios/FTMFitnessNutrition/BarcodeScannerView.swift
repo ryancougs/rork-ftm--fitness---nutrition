@@ -181,7 +181,9 @@ private final class ScannerPreviewView: UIView {
         let discovery = AVCaptureDevice.DiscoverySession(
             deviceTypes: [.external, .builtInWideAngleCamera],
             mediaType: .video,
-            position: .back
+            // .unspecified so the preview's injected external webcam matches
+            // (external cameras report position .unspecified, not .back).
+            position: .unspecified
         )
         guard let device = discovery.devices.first,
               let input = try? AVCaptureDeviceInput(device: device),
