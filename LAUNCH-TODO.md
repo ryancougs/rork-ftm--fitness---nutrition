@@ -31,8 +31,8 @@ Come back to this list anytime — it lives in the project so it never gets lost
 
 ## 5. TestFlight (me)
 
-- [ ] Start the build upload as soon as you say go (needs your Rork plan active)
-- [ ] You install from TestFlight on your iPhone and run a real user session
+- [x] Start the build upload as soon as you say go (needs your Rork plan active) — **Build 7 uploaded Oct 23** ✅
+- [ ] You install from TestFlight on your iPhone and run a real user session (invite email arrives once build finishes processing, ~10–30 min)
 - [ ] Add your few testers via App Store Connect → TestFlight → internal testers
 - [ ] Demo account for Apple's reviewer (email/password they can sign in with)
 
