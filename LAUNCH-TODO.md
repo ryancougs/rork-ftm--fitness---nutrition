@@ -6,8 +6,8 @@ Come back to this list anytime — it lives in the project so it never gets lost
 ## 1. RevenueCat paid products (you + me, needs the dashboard)
 
 - [ ] Confirm the two products exist and are attached to App Store Connect subscriptions: `premium_monthly`, `premium_annual`
-- [ ] **Change the price** — DECISION NEEDED FROM YOU: what should the new price(s) be? (Currently $9.99/mo, $49.99/yr)
-- [ ] **Dial down the offer** — DECISION NEEDED: shorter/longer free trial? (Currently 7-day trial on annual) — trial is set in App Store Connect, then mirrored in RevenueCat
+- [ ] **Change the price**: DECIDED Oct 24. Monthly stays $9.99. Annual goes from $49.99 to **$95.99** (20% off 12 x monthly). Change in App Store Connect > Subscriptions > premium_annual > Subscription Prices
+- [ ] **Free trial**: DECIDED Oct 24. **2-week free trial on BOTH plans.** App Store Connect > each subscription > Introductory Offers > Free, 2 weeks, all territories. Paywall copy updates itself.
 - [ ] Confirm entitlement `premium` has both products attached
 - [ ] Confirm offering `default` has package IDs `premium_monthly` + `premium_annual`
 - [ ] Note: prices shown in the app always come from RevenueCat automatically (localized) — no app change needed when prices change, but App Store Connect + RevenueCat must match
@@ -25,6 +25,8 @@ Come back to this list anytime — it lives in the project so it never gets lost
 - [ ] Already fixed this week: dead buttons, laggy scroll, blank camera in preview — re-check these first
 
 ## 4. Aesthetic pass (me)
+
+- [x] Onboarding: added "Your plan is ready" reveal (their calories, macros, split, perks) right before the trial paywall (Oct 24)
 
 - [ ] Sweep for anything looking unfinished (spacing, contrast, leftover default styling)
 - [ ] Fresh eyes on Home, Nutrition, Train, Community, Profile — one polish pass, no rebuilds

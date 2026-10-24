@@ -22,9 +22,24 @@ struct IntakeView: View {
     @State private var heightIn: String = ""
     @State private var age: String = ""
 
+    /// After the last question: a personalized "your plan is ready" reveal
+    /// that builds anticipation before the trial offer.
+    @State private var showReveal: Bool = false
+    @State private var isBuilding: Bool = true
+    @State private var revealed: Bool = false
+
     private let totalSteps = 7
 
     var body: some View {
+        if showReveal {
+            planReveal
+                .transition(.opacity)
+        } else {
+            questionnaire
+        }
+    }
+
+    private var questionnaire: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 progressBar
@@ -285,19 +300,215 @@ struct IntakeView: View {
         if step < totalSteps - 1 {
             withAnimation(.easeOut(duration: 0.25)) { step += 1 }
         } else {
-            // Entered in US units (lbs, ft+in); stored as kg/cm for BMR math.
-            let bw = (Double(bodyweightLbs) ?? 0) * 0.453592
-            let ft = Double(heightFt) ?? 0
-            let inches = Double(heightIn) ?? 0
-            let h = ft * 30.48 + inches * 2.54
-            let a = Int(age)
-            app.completeIntake(
-                goal: goal, experience: experience, daysPerWeek: daysPerWeek,
-                lifestyle: lifestyle, equipment: equipment,
-                bodyweightKg: bw > 0 ? (bw * 10).rounded() / 10 : nil,
-                heightCm: h > 0 ? (h * 10).rounded() / 10 : nil,
-                age: (a ?? 0) > 0 ? a : nil
-            )
+            startReveal()
+        }
+    }
+
+    // MARK: Body stats (entered in US units, stored as kg/cm for BMR math)
+
+    private var bodyweightKgValue: Double? {
+        let bw = (Double(bodyweightLbs) ?? 0) * 0.453592
+        return bw > 0 ? (bw * 10).rounded() / 10 : nil
+    }
+
+    private var heightCmValue: Double? {
+        let h = (Double(heightFt) ?? 0) * 30.48 + (Double(heightIn) ?? 0) * 2.54
+        return h > 0 ? (h * 10).rounded() / 10 : nil
+    }
+
+    private var ageValue: Int? {
+        guard let a = Int(age), a > 0 else { return nil }
+        return a
+    }
+
+    /// The profile as it will be saved, used to preview the real plan.
+    private var draftProfile: UserProfile {
+        var p = app.profile
+        p.goal = goal
+        p.experience = experience
+        p.daysPerWeek = daysPerWeek
+        p.lifestyle = lifestyle
+        p.equipment = equipment
+        p.bodyweightKg = bodyweightKgValue
+        p.heightCm = heightCmValue
+        p.age = ageValue
+        return p
+    }
+
+    private func finishIntake() {
+        app.completeIntake(
+            goal: goal, experience: experience, daysPerWeek: daysPerWeek,
+            lifestyle: lifestyle, equipment: equipment,
+            bodyweightKg: bodyweightKgValue,
+            heightCm: heightCmValue,
+            age: ageValue
+        )
+    }
+
+    // MARK: Plan reveal
+
+    private func startReveal() {
+        isBuilding = true
+        revealed = false
+        withAnimation(.easeInOut(duration: 0.35)) { showReveal = true }
+        Task {
+            try? await Task.sleep(for: .seconds(2.2))
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.85)) { isBuilding = false }
+            try? await Task.sleep(for: .seconds(0.15))
+            withAnimation(.spring(response: 0.7, dampingFraction: 0.8)) { revealed = true }
+        }
+    }
+
+    private var firstName: String {
+        let n = app.profile.name.split(separator: " ").first.map(String.init) ?? ""
+        return n.isEmpty ? "friend" : n
+    }
+
+    private var planReveal: some View {
+        let profile = draftProfile
+        let targets = PlanEngine.targets(for: profile)
+        let program = PlanEngine.generateProgram(for: profile)
+
+        return ZStack {
+            TF.bg.ignoresSafeArea()
+            TF.accentGradient.ignoresSafeArea()
+
+            if isBuilding {
+                VStack(spacing: 22) {
+                    ProgressView()
+                        .controlSize(.large)
+                        .tint(TF.blue)
+                    Text("Building your plan, \(firstName)…")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(TF.text)
+                    VStack(alignment: .leading, spacing: 8) {
+                        buildLine("Calculating your daily energy needs")
+                        buildLine("Setting protein for \(profile.goal.rawValue.lowercased())")
+                        buildLine("Designing a \(profile.daysPerWeek)-day training split")
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(TF.textSecondary)
+                }
+                .padding(24)
+                .transition(.opacity)
+            } else {
+                VStack(spacing: 0) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 20) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Your plan is ready")
+                                    .font(.largeTitle.weight(.bold))
+                                    .foregroundStyle(TF.text)
+                                Text("Built around you, \(firstName). Your goal, your body, your schedule. No explaining yourself required.")
+                                    .font(.body)
+                                    .foregroundStyle(TF.textSecondary)
+                            }
+
+                            revealCard(delay: 0.0) {
+                                VStack(alignment: .leading, spacing: 14) {
+                                    Label("Daily nutrition", systemImage: "fork.knife")
+                                        .font(.headline)
+                                        .foregroundStyle(TF.blue)
+                                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                        Text("\(targets.calories)")
+                                            .font(.system(size: 44, weight: .bold, design: .rounded))
+                                            .foregroundStyle(TF.text)
+                                            .contentTransition(.numericText())
+                                        Text("calories")
+                                            .font(.subheadline)
+                                            .foregroundStyle(TF.textSecondary)
+                                    }
+                                    HStack(spacing: 10) {
+                                        macroPill("Protein", targets.protein, TF.protein)
+                                        macroPill("Carbs", targets.carbs, TF.carbs)
+                                        macroPill("Fat", targets.fat, TF.fat)
+                                    }
+                                }
+                            }
+
+                            revealCard(delay: 0.12) {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Label("Your training", systemImage: "figure.strengthtraining.traditional")
+                                        .font(.headline)
+                                        .foregroundStyle(TF.blue)
+                                    Text(program.name)
+                                        .font(.title3.weight(.semibold))
+                                        .foregroundStyle(TF.text)
+                                    Text("\(program.days.count) sessions a week · \(profile.experience.rawValue) · \(profile.equipment.rawValue)")
+                                        .font(.subheadline)
+                                        .foregroundStyle(TF.textSecondary)
+                                }
+                            }
+
+                            revealCard(delay: 0.24) {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Label("Included with your plan", systemImage: "sparkles")
+                                        .font(.headline)
+                                        .foregroundStyle(TF.pink)
+                                    perkLine("camera.viewfinder", "AI meal scanning: snap a photo, get the macros")
+                                    perkLine("barcode.viewfinder", "Barcode scanner and food search")
+                                    perkLine("chart.line.uptrend.xyaxis", "Weekly check-ins that adjust your targets")
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 28)
+                        .padding(.bottom, 24)
+                    }
+
+                    TFButton(title: "Start my plan", systemImage: "arrow.right", style: .primary) {
+                        finishIntake()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .opacity(revealed ? 1 : 0)
+                }
+                .transition(.opacity)
+            }
+        }
+    }
+
+    private func buildLine(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(TF.success)
+            Text(text)
+        }
+    }
+
+    private func revealCard<Content: View>(delay: Double, @ViewBuilder content: () -> Content) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(18)
+            .background(RoundedRectangle(cornerRadius: TF.cornerL).fill(TF.card))
+            .overlay(RoundedRectangle(cornerRadius: TF.cornerL).stroke(TF.border, lineWidth: 1))
+            .opacity(revealed ? 1 : 0)
+            .offset(y: revealed ? 0 : 18)
+            .animation(.spring(response: 0.6, dampingFraction: 0.85).delay(delay), value: revealed)
+    }
+
+    private func macroPill(_ label: String, _ grams: Int, _ color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text("\(grams)g")
+                .font(.headline)
+                .foregroundStyle(color)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(TF.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: TF.cornerS).fill(TF.input))
+    }
+
+    private func perkLine(_ icon: String, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .foregroundStyle(TF.blue)
+                .frame(width: 22)
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(TF.text)
         }
     }
 }
