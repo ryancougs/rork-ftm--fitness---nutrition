@@ -43,3 +43,24 @@ Come back to this list anytime — it lives in the project so it never gets lost
 - [ ] Screenshots (I generate), listing text (I draft, you approve)
 - [ ] Privacy policy URL: https://2gxfo9qxolcyjgbzbeaoj-web.rork.live/privacy ✅ already live
 - [ ] Submit for review — Apple takes 1–3 days
+
+## Status Oct 24 (end of session)
+
+Done:
+- [x] Prices: $9.99/mo, $99.99/yr (Save 17%), 2-week free trial on both (App Store Connect)
+- [x] premium_annual created; subscription group named "FTM Premium"
+- [x] RevenueCat connected to App Store Connect (API key + In-App Purchase key)
+- [x] premium_monthly + premium_annual imported into RevenueCat
+- [x] Paywall: "Start free trial" + "Continue with the free version"; FTM Premium name
+- [x] Free users can follow ready-made plans; custom plan is Premium
+- [x] Check-ins re-upload if a save failed; coach photo placeholder
+
+Left:
+- [ ] App Store Connect: fix "Missing Metadata" on Premium Monthly
+- [ ] RevenueCat: attach both new products to `premium` entitlement
+- [ ] RevenueCat: default offering, swap new products into both packages
+- [ ] RevenueCat Test Store: premium_monthly $9.99, premium_annual $99.99 (for preview)
+- [ ] Supabase secrets: REVENUECAT_SECRET_KEY + EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY present
+- [ ] New TestFlight build, then test: 3 free scans, limit hit, start trial, unlimited scans
+
+Next session: modern aesthetic refresh (bring 3 to 5 screenshots of apps you like)
