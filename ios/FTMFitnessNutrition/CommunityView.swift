@@ -163,11 +163,14 @@ struct CommunityView: View {
     private var coachSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                Image("CoachMason")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 44, height: 44)
-                    .clipShape(Circle())
+                // Placeholder until a real coach photo is added.
+                ZStack {
+                    Circle().fill(TF.blue.opacity(0.18))
+                    Text("M")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(TF.blue)
+                }
+                .frame(width: 44, height: 44)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("From Coach Mason")
                         .font(.headline.weight(.bold))

@@ -115,6 +115,34 @@ final class AppModel {
 
     // Selection state for the current day on Train tab (persisted in-memory).
     var selectedProgramID: UUID? = nil
+
+    /// Ready-made plan the user picked to follow (any tier). Stored by name
+    /// because sample program ids are regenerated each launch.
+    var chosenProgramName: String? = UserDefaults.standard.string(forKey: "chosenProgramName") {
+        didSet { UserDefaults.standard.set(chosenProgramName, forKey: "chosenProgramName") }
+    }
+
+    var chosenProgram: WorkoutProgram? {
+        guard let chosenProgramName else { return nil }
+        return programs.first { $0.name == chosenProgramName }
+    }
+
+    /// The plan Today's Session follows: a picked ready-made plan first, then
+    /// the custom plan (Premium only), then the first ready-made plan.
+    var activeProgram: WorkoutProgram? {
+        if let chosenProgram { return chosenProgram }
+        if StoreService.shared.isPremium, let personalProgram { return personalProgram }
+        return programs.first
+    }
+
+    func isActive(_ program: WorkoutProgram) -> Bool {
+        activeProgram?.id == program.id
+    }
+
+    /// Follow this plan. Picking the custom plan clears the ready-made choice.
+    func follow(_ program: WorkoutProgram) {
+        chosenProgramName = (program.id == personalProgram?.id) ? nil : program.name
+    }
     var selectedDayID: UUID? = nil
 
     // Active main tab, so Home cards can deep-link into other tabs.
@@ -207,6 +235,7 @@ final class AppModel {
         exerciseLogs.removeAll()
         checkIns.removeAll()
         personalProgram = nil
+        chosenProgramName = nil
         hasCompletedOnboarding = false
         recentFoods.removeAll()
         favoriteFoods.removeAll()
@@ -255,7 +284,14 @@ final class AppModel {
         }
 
         // Merge cloud check-ins into any local ones (union by week start).
-        for cloudRow in await SupabaseService.shared.fetchCheckIns() {
+        let cloudRows = await SupabaseService.shared.fetchCheckIns()
+        let cloudWeeks = cloudRows.compactMap { SupabaseService.date(fromKey: $0.weekStart) }
+        // Re-upload any local check-in that never reached the server (e.g. it
+        // was saved offline), so nothing is lost on logout or a new phone.
+        for local in checkIns where !cloudWeeks.contains(where: { $0.isSameDay(as: local.weekStart) }) {
+            await SupabaseService.shared.syncCheckIn(local)
+        }
+        for cloudRow in cloudRows {
             guard let weekStart = SupabaseService.date(fromKey: cloudRow.weekStart),
                   let adherence = WorkoutAdherence(rawValue: cloudRow.workoutAdherence),
                   let feeling = ProgressFeeling(rawValue: cloudRow.progressFeeling),
@@ -334,7 +370,7 @@ final class AppModel {
     /// Today's session from the personalized plan, spread across the user's
     /// preferred training weekdays. Nil on rest days.
     var todayWorkout: WorkoutDay? {
-        guard let program = personalProgram ?? SampleData.programs.first,
+        guard let program = activeProgram,
               !program.days.isEmpty else { return nil }
         let weekday = Calendar.current.component(.weekday, from: Date())
         let trainingDays = SampleData.preferredTrainingDays(weekly: profile.daysPerWeek)

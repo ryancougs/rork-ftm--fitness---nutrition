@@ -40,6 +40,7 @@ struct PaywallView: View {
 
 /// The paywall body, shared by the sheet and the post-onboarding offer.
 struct PaywallContentView: View {
+    @Environment(\.dismiss) private var dismiss
     var context: PaywallContext? = nil
     var onPurchased: () -> Void = {}
 
@@ -121,6 +122,18 @@ struct PaywallContentView: View {
                         .padding(.top, 2)
                 }
                 purchaseButton
+            }
+            if !store.isPremium {
+                Button {
+                    dismiss()
+                } label: {
+                    Text("Continue with the free version")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(TF.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                }
+                .buttonStyle(.plain)
             }
             restoreButton
             legalFooter
@@ -319,7 +332,7 @@ struct PaywallContentView: View {
 
     private var ctaTitle: String {
         guard let package = selectedPackage else { return "Continue" }
-        if trialLine != nil { return "Start my free trial" }
+        if trialLine != nil { return "Start free trial" }
         let word = package.storeProduct.subscriptionPeriod?.unit == .year ? "year" : "month"
         return "Subscribe — \(package.storeProduct.localizedPriceString)/\(word)"
     }

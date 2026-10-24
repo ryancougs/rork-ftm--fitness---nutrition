@@ -97,12 +97,25 @@ struct TrainView: View {
     @ViewBuilder
     private var yourPlanSection: some View {
         if let plan = app.personalProgram {
-            TFSectionHeader(title: "Your Plan", subtitle: "Built around your goal, experience, and schedule — regenerated whenever your profile changes")
+            TFSectionHeader(title: "Your Custom Plan", subtitle: "Built around your goal, experience, and schedule. Updates whenever your profile changes")
                 .padding(.top, 8)
-            NavigationLink(value: plan) {
-                ProgramRow(program: plan)
-            }
-            .buttonStyle(.plain)
+            PremiumGate(
+                requiredTier: .premium,
+                unlocked: {
+                    NavigationLink(value: plan) {
+                        ProgramRow(program: plan)
+                    }
+                    .buttonStyle(.plain)
+                },
+                locked: {
+                    LockedFeatureCard(
+                        icon: "sparkles",
+                        title: "Your custom plan",
+                        message: "Get a program built for your goal, body, schedule and equipment, adjusted by your weekly check-ins.",
+                        context: .programs
+                    )
+                }
+            )
             if let adjustment = app.weeklyAdjustment, adjustment.isDeload {
                 Text(adjustment.title)
                     .font(.footnote.weight(.medium))
@@ -118,27 +131,14 @@ struct TrainView: View {
 
     @ViewBuilder
     private var browseProgramsSection: some View {
-        TFSectionHeader(title: "Browse Programs", subtitle: "Sample plans to explore")
+        TFSectionHeader(title: "Ready-Made Plans", subtitle: "Pick one to follow. Free for everyone")
             .padding(.top, 8)
-        PremiumGate(
-            requiredTier: .premium,
-            unlocked: {
-                ForEach(app.programs) { program in
-                    NavigationLink(value: program) {
-                        ProgramRow(program: program)
-                    }
-                    .buttonStyle(.plain)
-                }
-            },
-            locked: {
-                LockedFeatureCard(
-                    icon: "dumbbell.fill",
-                    title: "Workout programs & routines",
-                    message: "Unlock every program and routine on top of your own plan. Logging today's session stays free, forever.",
-                    context: .programs
-                )
+        ForEach(app.programs) { program in
+            NavigationLink(value: program) {
+                ProgramRow(program: program)
             }
-        )
+            .buttonStyle(.plain)
+        }
     }
 }
 
@@ -334,11 +334,24 @@ private struct ProgramRow: View {
 // MARK: - Program detail (browsing)
 
 private struct ProgramDetailView: View {
+    @Environment(AppModel.self) private var app
     let program: WorkoutProgram
 
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
+                if app.isActive(program) {
+                    Label("You're following this plan", systemImage: "checkmark.circle.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(TF.success)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(RoundedRectangle(cornerRadius: TF.cornerS).fill(TF.input))
+                } else {
+                    TFButton(title: "Follow this plan", systemImage: "checkmark", style: .primary) {
+                        app.follow(program)
+                    }
+                }
                 TFCard {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(program.summary)
