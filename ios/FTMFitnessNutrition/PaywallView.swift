@@ -169,7 +169,7 @@ struct PaywallContentView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: 56, height: 56)
-            Text("TransFit Premium")
+            Text("FTM Premium")
                 .font(.title2.weight(.bold))
             Text("No ads, ever. Your data stays yours. Upgrade when you're ready for more.")
                 .font(.subheadline)
@@ -301,7 +301,7 @@ struct PaywallContentView: View {
             "Barcode scanner + quick-add macros",
             "Custom calorie & macro goals",
             "Full history & progress analytics",
-            "All workout programs & routines",
+            "Your custom training plan, adjusted weekly",
         ]
     }
 
