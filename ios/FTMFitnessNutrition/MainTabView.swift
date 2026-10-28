@@ -42,14 +42,14 @@ struct MainTabView: View {
                 tabButton(tab)
             }
         }
-        .padding(.top, 6)
+        .padding(.top, 8)
         .padding(.bottom, 4)
         .background(
-            TF.card
+            TF.bg
                 .overlay(alignment: .top) {
                     Rectangle()
-                        .fill(TF.border)
-                        .frame(height: 0.5)
+                        .fill(TF.input)
+                        .frame(height: 1)
                 }
                 .ignoresSafeArea(edges: .bottom)
         )
@@ -62,23 +62,19 @@ struct MainTabView: View {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             withAnimation(.easeInOut(duration: 0.15)) { app.selectedTab = tab }
         } label: {
-            VStack(spacing: 3) {
+            VStack(spacing: 4) {
                 Image(systemName: tab.systemImage)
-                    .font(.system(size: 19, weight: .semibold))
-                    .frame(height: 22)
+                    .font(.system(size: 20, weight: .semibold))
+                    .frame(height: 24)
                 Text(tab.label)
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 11, weight: isSelected ? .bold : .semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
             .frame(maxWidth: .infinity)
-            .padding(.top, 5)
-            .foregroundStyle(isSelected ? TF.blue : TF.textSecondary)
-            .overlay(alignment: .top) {
-                Capsule()
-                    .fill(isSelected ? TF.blue : Color.clear)
-                    .frame(width: 28, height: 3)
-            }
+            .padding(.top, 2)
+            .contentShape(Rectangle())
+            .foregroundStyle(isSelected ? TF.text : TF.textSecondary.opacity(0.8))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(tab.label)

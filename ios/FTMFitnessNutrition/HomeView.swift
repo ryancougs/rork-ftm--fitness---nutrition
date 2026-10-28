@@ -5,45 +5,39 @@
 
 import SwiftUI
 
-/// Home dashboard: safety-first greeting, today's workout, nutrition summary,
-/// weekly check-in prompt, and a rotating tip from Mason.
+/// Home dashboard, redesigned Oct 2026: one focal point (calories left today),
+/// a weekly training streak row, today's session, one primary action, then the
+/// weekly check-in / Mason's note and Mason's tip.
 struct HomeView: View {
     @Environment(AppModel.self) private var app
     @State private var showingProfile = false
     @State private var showingCheckIn = false
 
     var body: some View {
-        @Bindable var app = app
         NavigationStack {
             ScrollView {
-                VStack(spacing: 18) {
-                    greetingCard
+                VStack(alignment: .leading, spacing: 26) {
+                    header
+                    weekRow
+                    calorieHero
+                    VStack(spacing: 12) {
+                        sessionRow
+                        primaryButton
+                    }
                     if !app.hasCheckedInThisWeek() {
                         checkInPromptCard
                     } else if let adjustment = app.weeklyAdjustment {
                         masonNoteCard(adjustment)
                     }
-                    workoutCard
-                    nutritionCard
                     masonTipCard
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 16)
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 24)
             }
+            .scrollIndicators(.hidden)
             .background(TF.bg.ignoresSafeArea())
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showingProfile = true
-                    } label: {
-                        Image(systemName: "person.crop.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(TF.blue)
-                    }
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingProfile) {
                 ProfileView()
                     .presentationDetents([.large])
@@ -57,7 +51,7 @@ struct HomeView: View {
         }
     }
 
-    // MARK: Greeting
+    // MARK: Header
 
     private var firstName: String {
         let n = app.profile.name.trimmingCharacters(in: .whitespaces)
@@ -78,251 +72,320 @@ struct HomeView: View {
         app.todayWorkout
     }
 
-    @ViewBuilder
-    private var greetingCard: some View {
-        TFHomeBanner {
-            VStack(alignment: .leading, spacing: 8) {
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center) {
                 Text("\(greetingText), \(firstName.isEmpty ? "friend" : firstName)")
-                    .font(.title2.weight(.bold))
-                Text("This is your space. You don't have to explain yourself before you start training.")
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.85))
-                HStack(spacing: 8) {
-                    Label(app.profile.goal.rawValue, systemImage: "target")
-                    Text("•")
-                    Label("\(app.profile.daysPerWeek)d/wk", systemImage: "calendar")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(TF.textSecondary)
+                Spacer()
+                Button {
+                    showingProfile = true
+                } label: {
+                    Image(systemName: "person.crop.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundStyle(TF.textSecondary)
                 }
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.white.opacity(0.85))
-                .padding(.top, 4)
+                .buttonStyle(.plain)
+                .accessibilityLabel("Profile")
+            }
+            Text("You've trained \(trainedThisWeek) / \(app.profile.daysPerWeek) days this week")
+                .font(.system(size: 30, weight: .heavy))
+                .tracking(-0.6)
+                .foregroundStyle(TF.text)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // MARK: Week row
+
+    private struct WeekDayCell: Identifiable {
+        let id: Int
+        let letter: String
+        let dayNumber: Int
+        let trained: Bool
+        let isToday: Bool
+        let isPlanned: Bool
+    }
+
+    private var weekCells: [WeekDayCell] {
+        var cal = Calendar.current
+        cal.firstWeekday = 2 // Monday
+        let today = cal.startOfDay(for: Date())
+        guard let start = cal.dateInterval(of: .weekOfYear, for: today)?.start else { return [] }
+        let planned = SampleData.preferredTrainingDays(weekly: app.profile.daysPerWeek)
+        let letters = ["M", "T", "W", "T", "F", "S", "S"]
+        return (0..<7).compactMap { i in
+            guard let date = cal.date(byAdding: .day, value: i, to: start) else { return nil }
+            let key = AppModel.dateKey(date)
+            let trained = (app.exerciseLogs[key] ?? [:]).values.contains { !$0.sets.isEmpty }
+            return WeekDayCell(
+                id: i,
+                letter: letters[i],
+                dayNumber: cal.component(.day, from: date),
+                trained: trained,
+                isToday: cal.isDate(date, inSameDayAs: today),
+                isPlanned: planned.contains(cal.component(.weekday, from: date))
+            )
+        }
+    }
+
+    private var trainedThisWeek: Int {
+        weekCells.filter { $0.trained }.count
+    }
+
+    private var weekRow: some View {
+        HStack(spacing: 6) {
+            ForEach(weekCells) { day in
+                weekCell(day)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Trained \(trainedThisWeek) of \(app.profile.daysPerWeek) planned days this week")
+    }
+
+    private func weekCell(_ day: WeekDayCell) -> some View {
+        VStack(spacing: 6) {
+            Text(day.letter)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(TF.textSecondary)
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(day.trained ? TF.blue : TF.card)
+                if day.isToday && !day.trained {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(TF.blue, lineWidth: 2)
+                }
+                if day.trained {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundStyle(TF.bg)
+                } else {
+                    Text("\(day.dayNumber)")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(day.isToday ? TF.text : TF.textSecondary.opacity(day.isPlanned ? 1 : 0.45))
+                }
+            }
+            .frame(height: 42)
+            Circle()
+                .fill(day.isPlanned && !day.trained ? TF.pink : Color.clear)
+                .frame(width: 4, height: 4)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: Calorie hero
+
+    private var calorieHero: some View {
+        let totals = app.nutritionTotals()
+        let target = Double(app.profile.targetCalories)
+        let remaining = max(0, target - totals.cal)
+        let progress = target > 0 ? min(totals.cal / target, 1) : 0
+        let proLeft = max(0, Double(app.profile.targetProtein) - totals.pro)
+        let carbLeft = max(0, Double(app.profile.targetCarbs) - totals.carb)
+        let fatLeft = max(0, Double(app.profile.targetFat) - totals.fat)
+
+        return Button {
+            app.selectedTab = .eat
+        } label: {
+            ZStack {
+                Circle()
+                    .stroke(TF.input, lineWidth: 16)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(TF.blue, style: StrokeStyle(lineWidth: 16, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .animation(.spring(response: 0.6, dampingFraction: 0.85), value: progress)
+                VStack(spacing: 4) {
+                    Text("\(Int(remaining.rounded()))")
+                        .font(.system(size: 60, weight: .heavy))
+                        .tracking(-2)
+                        .foregroundStyle(TF.text)
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(1)
+                    Text("kcal left today")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(TF.textSecondary)
+                    HStack(spacing: 12) {
+                        macroLeft("P", proLeft, TF.protein)
+                        macroLeft("C", carbLeft, TF.carbs)
+                        macroLeft("F", fatLeft, TF.fat)
+                    }
+                    .padding(.top, 10)
+                }
+                .padding(.horizontal, 28)
+            }
+            .frame(width: 250, height: 250)
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(Int(remaining.rounded())) calories left today. Open nutrition.")
+    }
+
+    private func macroLeft(_ letter: String, _ grams: Double, _ color: Color) -> some View {
+        Text("\(letter) \(Int(grams.rounded()))g")
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(color)
+    }
+
+    // MARK: Session row
+
+    private var sessionSubtitle: String {
+        guard let day = todayWorkout else {
+            return "Recover, hydrate and fuel well"
+        }
+        let done = completedExercises(in: day)
+        let total = day.exercises.count
+        if done > 0 { return "\(done) of \(total) exercises done" }
+        return "\(total) exercises · \(day.focus)"
+    }
+
+    private var sessionRow: some View {
+        HStack(spacing: 12) {
+            Button {
+                app.selectedTab = .train
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(todayWorkout == nil ? "Today" : "Today's session")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(TF.textSecondary)
+                    Text(todayWorkout?.title ?? "Rest day")
+                        .font(.system(size: 20, weight: .heavy))
+                        .foregroundStyle(TF.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                    Text(sessionSubtitle)
+                        .font(.system(size: 13))
+                        .foregroundStyle(TF.textSecondary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous).fill(TF.card)
+                )
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                app.selectedTab = .eat
+            } label: {
+                VStack(spacing: 6) {
+                    Image(systemName: "fork.knife")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(TF.blue)
+                    Text("Log food")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(TF.text)
+                }
+                .frame(width: 84)
+                .frame(maxHeight: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous).fill(TF.card)
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Log food")
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    // MARK: Primary action
+
+    private var primaryTitle: String {
+        guard let day = todayWorkout else { return "Log today's food" }
+        let done = completedExercises(in: day)
+        if done == 0 { return "Start session" }
+        if done >= day.exercises.count { return "Session complete" }
+        return "Continue session"
+    }
+
+    private var primaryButton: some View {
+        Button {
+            app.selectedTab = todayWorkout == nil ? .eat : .train
+        } label: {
+            Text(primaryTitle)
+                .font(.system(size: 18, weight: .heavy))
+                .foregroundStyle(TF.bg)
+                .frame(maxWidth: .infinity)
+                .frame(height: 60)
+                .background(Capsule().fill(TF.blue))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: Check-in prompt
 
-    @ViewBuilder
     private var checkInPromptCard: some View {
         Button {
             showingCheckIn = true
         } label: {
-            TFCard {
-                HStack(spacing: 14) {
-                    ZStack {
-                        Circle()
-                            .fill(TF.pink.opacity(0.18))
-                            .frame(width: 44, height: 44)
-                        Image(systemName: "heart.text.square.fill")
-                            .foregroundStyle(TF.pink)
-                            .font(.title3)
-                    }
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Weekly check-in")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(TF.text)
-                        Text("How are you doing this week? Take a minute to reflect.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.leading)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(.tertiary)
-                        .font(.caption)
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(TF.input)
+                        .frame(width: 48, height: 48)
+                    Image(systemName: "heart.text.square.fill")
+                        .foregroundStyle(TF.pink)
+                        .font(.title3)
                 }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Weekly check-in")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(TF.text)
+                    Text("How are you doing this week? Take a minute to reflect.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(TF.textSecondary)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(TF.textSecondary)
             }
+            .homeCard()
         }
         .buttonStyle(.plain)
     }
 
     // MARK: Mason's weekly note (from the latest check-in)
 
-    @ViewBuilder
     private func masonNoteCard(_ adjustment: PlanEngine.WeeklyAdjustment) -> some View {
-        TFCard(background: TF.blue.opacity(0.12)) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) {
-                    ZStack {
-                        Circle()
-                            .fill(TF.blue)
-                            .frame(width: 36, height: 36)
-                        Image(systemName: "quote.bubble.fill")
-                            .foregroundStyle(.white)
-                            .font(.caption)
-                    }
-                    Text("Mason's note this week")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(TF.blue)
-                    Spacer()
-                    Image(systemName: adjustment.symbol)
-                        .foregroundStyle(TF.blue)
-                }
-                Text(adjustment.title)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(TF.text)
-                Text(adjustment.message)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: adjustment.symbol)
+                    .foregroundStyle(TF.blue)
+                Text("Mason's note this week")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(TF.blue)
             }
+            Text(adjustment.title)
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(TF.text)
+            Text(adjustment.message)
+                .font(.system(size: 14))
+                .foregroundStyle(TF.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    // MARK: Today's workout
-
-    @ViewBuilder
-    private var workoutCard: some View {
-        if let day = todayWorkout {
-            Button {
-                app.selectedTab = .train
-            } label: {
-                workoutCardContent(day)
-            }
-            .buttonStyle(.plain)
-        } else {
-            TFCard {
-                HStack(spacing: 14) {
-                    Image(systemName: "figure.cooldown")
-                        .font(.system(size: 36))
-                        .foregroundStyle(TF.blue)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Rest day")
-                            .font(.headline.weight(.bold))
-                        Text("Recovery is part of the work. Move gently, hydrate, and fuel well.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                }
-            }
-        }
-    }
-
-    private func workoutCardContent(_ day: WorkoutDay) -> some View {
-        TFCard {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Image(systemName: "dumbbell.fill")
-                        .foregroundStyle(TF.blue)
-                    Text("Today's Session")
-                        .font(.headline.weight(.bold))
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(.tertiary)
-                        .font(.caption)
-                }
-                Text(day.title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(TF.text)
-                Text(day.focus)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                let done = completedExercises(in: day)
-                let total = day.exercises.count
-                HStack(spacing: 10) {
-                    Label("\(day.exercises.count) exercises", systemImage: "list.bullet")
-                    Spacer()
-                    if done > 0 {
-                        Label("\(done)/\(total) done", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(TF.blue)
-                    } else {
-                        Label("Tap to start", systemImage: "play.circle")
-                            .foregroundStyle(TF.blue)
-                    }
-                }
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                if done > 0 {
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(TF.card).frame(height: 6)
-                            Capsule()
-                                .fill(TF.blue)
-                                .frame(width: geo.size.width * (Double(done) / Double(total)), height: 6)
-                        }
-                    }
-                    .frame(height: 6)
-                }
-            }
-        }
-    }
-
-    // MARK: Nutrition summary
-
-    @ViewBuilder
-    private var nutritionCard: some View {
-        let totals = app.nutritionTotals()
-        let calTarget = Double(app.profile.targetCalories)
-        let calRemaining = max(0, calTarget - totals.cal)
-        let progress = calTarget > 0 ? totals.cal / calTarget : 0
-
-        TFCard {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Text("Today's Nutrition")
-                        .font(.headline.weight(.bold))
-                    Spacer()
-                    Text("Today")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                HStack(alignment: .center, spacing: 16) {
-                    ProgressRing(progress: progress, color: TF.blue, size: 72, label: "\(Int((progress * 100).rounded()))%")
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("\(Int(calRemaining.rounded()))")
-                            .font(.title.weight(.bold))
-                            .foregroundStyle(TF.text)
-                        Text("kcal remaining to fuel your day")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                        Text("\(Int(totals.cal.rounded())) / \(app.profile.targetCalories) kcal")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 2)
-                    }
-                    Spacer()
-                }
-                Divider()
-                VStack(spacing: 10) {
-                    MacroBar(label: "Protein", value: totals.pro, target: Double(app.profile.targetProtein), color: TF.protein)
-                    MacroBar(label: "Carbs", value: totals.carb, target: Double(app.profile.targetCarbs), color: TF.carbs)
-                    MacroBar(label: "Fat", value: totals.fat, target: Double(app.profile.targetFat), color: TF.fat)
-                }
-            }
-        }
+        .homeCard()
     }
 
     // MARK: Mason's tip
 
-    @ViewBuilder
     private var masonTipCard: some View {
         let tip = SampleData.dailyTip()
-        TFCard(background: TF.blue.opacity(0.12)) {
-            HStack(alignment: .top, spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(TF.blue)
-                        .frame(width: 40, height: 40)
-                    Image(systemName: "quote.bubble.fill")
-                        .foregroundStyle(.white)
-                        .font(.caption)
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Mason's tip")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(TF.blue)
-                    Text(tip.text)
-                        .font(.subheadline)
-                        .foregroundStyle(TF.text)
-                        .multilineTextAlignment(.leading)
-                    Text(tip.category)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 2)
-                }
-                Spacer()
-            }
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Mason's tip · \(tip.category)")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(TF.pink)
+            Text(tip.text)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(TF.text)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .homeCard()
     }
 
     // MARK: Helpers
@@ -331,6 +394,18 @@ struct HomeView: View {
         day.exercises.filter { ex in
             !app.log(forExercise: ex.id).sets.isEmpty
         }.count
+    }
+}
+
+private extension View {
+    /// Flat rounded card used across the redesigned Home screen.
+    func homeCard() -> some View {
+        self
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous).fill(TF.card)
+            )
     }
 }
 
