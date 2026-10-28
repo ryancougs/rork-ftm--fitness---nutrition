@@ -63,4 +63,7 @@ Left:
 - [ ] Supabase secrets: REVENUECAT_SECRET_KEY + EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY present
 - [ ] New TestFlight build, then test: 3 free scans, limit hit, start trial, unlimited scans
 
-Next session: modern aesthetic refresh (bring 3 to 5 screenshots of apps you like)
+## Plan from Oct 28
+
+Phase 1: functionality first (the "Left" list above, step by step).
+Phase 2: full redesign. Goal: stop looking like every other AI-generated app. Take inspiration from top fitness apps (bring 3 to 5 screenshots) and redesign screen by screen.
