@@ -300,7 +300,7 @@ struct PaywallContentView: View {
             "Unlimited AI meal scans",
             "Barcode scanner + quick-add macros",
             "Custom calorie & macro goals",
-            "Full history & progress analytics",
+            "30 and 90 day nutrition trends",
             "Your custom training plan, adjusted weekly",
         ]
     }
@@ -389,7 +389,7 @@ struct PaywallContentView: View {
             Text("You're on \(store.tier.displayName)")
                 .font(.headline)
                 .foregroundStyle(TF.text)
-            Text("Everything in your plan is unlocked. Thank you for backing TransFit.")
+            Text("Everything in your plan is unlocked. Thank you for backing FTM: Fitness & Nutrition.")
                 .font(.footnote)
                 .foregroundStyle(TF.textSecondary)
                 .multilineTextAlignment(.center)

@@ -10,7 +10,6 @@ import SwiftUI
 /// weekly check-in / Mason's note and Mason's tip.
 struct HomeView: View {
     @Environment(AppModel.self) private var app
-    @State private var showingProfile = false
     @State private var showingCheckIn = false
 
     var body: some View {
@@ -38,11 +37,6 @@ struct HomeView: View {
             .scrollIndicators(.hidden)
             .background(TF.bg.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showingProfile) {
-                ProfileView()
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-            }
             .sheet(isPresented: $showingCheckIn) {
                 CheckInScreen()
                     .presentationDetents([.large])
@@ -80,7 +74,7 @@ struct HomeView: View {
                     .foregroundStyle(TF.textSecondary)
                 Spacer()
                 Button {
-                    showingProfile = true
+                    app.selectedTab = .profile
                 } label: {
                     Image(systemName: "person.crop.circle.fill")
                         .font(.system(size: 30))
@@ -113,7 +107,7 @@ struct HomeView: View {
         cal.firstWeekday = 2 // Monday
         let today = cal.startOfDay(for: Date())
         guard let start = cal.dateInterval(of: .weekOfYear, for: today)?.start else { return [] }
-        let planned = SampleData.preferredTrainingDays(weekly: app.profile.daysPerWeek)
+        let planned = app.trainingWeekdays
         let letters = ["M", "T", "W", "T", "F", "S", "S"]
         return (0..<7).compactMap { i in
             guard let date = cal.date(byAdding: .day, value: i, to: start) else { return nil }
@@ -180,6 +174,8 @@ struct HomeView: View {
         let totals = app.nutritionTotals()
         let target = Double(app.profile.targetCalories)
         let remaining = max(0, target - totals.cal)
+        let over = max(0, totals.cal - target)
+        let isOver = target > 0 && over >= 1
         let progress = target > 0 ? min(totals.cal / target, 1) : 0
         let proLeft = max(0, Double(app.profile.targetProtein) - totals.pro)
         let carbLeft = max(0, Double(app.profile.targetCarbs) - totals.carb)
@@ -193,17 +189,17 @@ struct HomeView: View {
                     .stroke(TF.input, lineWidth: 16)
                 Circle()
                     .trim(from: 0, to: progress)
-                    .stroke(TF.blue, style: StrokeStyle(lineWidth: 16, lineCap: .round))
+                    .stroke(isOver ? TF.warning : TF.blue, style: StrokeStyle(lineWidth: 16, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .animation(.spring(response: 0.6, dampingFraction: 0.85), value: progress)
                 VStack(spacing: 4) {
-                    Text("\(Int(remaining.rounded()))")
+                    Text("\(Int((isOver ? over : remaining).rounded()))")
                         .font(.system(size: 60, weight: .heavy))
                         .tracking(-2)
                         .foregroundStyle(TF.text)
                         .minimumScaleFactor(0.6)
                         .lineLimit(1)
-                    Text("kcal left today")
+                    Text(isOver ? "kcal over today" : "kcal left today")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(TF.textSecondary)
                     HStack(spacing: 12) {
@@ -219,7 +215,9 @@ struct HomeView: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(Int(remaining.rounded())) calories left today. Open nutrition.")
+        .accessibilityLabel(isOver
+            ? "\(Int(over.rounded())) calories over today. Open nutrition."
+            : "\(Int(remaining.rounded())) calories left today. Open nutrition.")
     }
 
     private func macroLeft(_ letter: String, _ grams: Double, _ color: Color) -> some View {
@@ -241,10 +239,10 @@ struct HomeView: View {
     }
 
     private var sessionRow: some View {
-        HStack(spacing: 12) {
-            Button {
-                app.selectedTab = .train
-            } label: {
+        Button {
+            app.selectedTab = .train
+        } label: {
+            HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(todayWorkout == nil ? "Today" : "Today's session")
                         .font(.system(size: 13, weight: .semibold))
@@ -259,36 +257,19 @@ struct HomeView: View {
                         .foregroundStyle(TF.textSecondary)
                         .lineLimit(1)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous).fill(TF.card)
-                )
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(TF.textSecondary)
             }
-            .buttonStyle(.plain)
-
-            Button {
-                app.selectedTab = .eat
-            } label: {
-                VStack(spacing: 6) {
-                    Image(systemName: "fork.knife")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(TF.blue)
-                    Text("Log food")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(TF.text)
-                }
-                .frame(width: 84)
-                .frame(maxHeight: .infinity)
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous).fill(TF.card)
-                )
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Log food")
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous).fill(TF.card)
+            )
         }
-        .fixedSize(horizontal: false, vertical: true)
+        .buttonStyle(.plain)
     }
 
     // MARK: Primary action

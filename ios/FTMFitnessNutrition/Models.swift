@@ -188,6 +188,58 @@ struct WorkoutProgram: Identifiable, Codable, Equatable, Hashable {
     }
 }
 
+// MARK: - Stable IDs
+
+extension UUID {
+    /// Same input string → same UUID, on every launch and every device.
+    /// Workout logs are keyed by exercise id, so plan ids must not change
+    /// between launches or after a plan rebuild.
+    nonisolated static func stable(_ key: String) -> UUID {
+        var h1: UInt64 = 0xcbf29ce484222325
+        var h2: UInt64 = 0x9e3779b97f4a7c15
+        for byte in key.utf8 {
+            h1 = (h1 ^ UInt64(byte)) &* 0x100000001b3
+            h2 = (h2 ^ UInt64(byte)) &* 0xff51afd7ed558ccd
+            h2 ^= h2 >> 33
+        }
+        var b = [UInt8](repeating: 0, count: 16)
+        for i in 0..<8 {
+            b[i] = UInt8(truncatingIfNeeded: h1 >> (UInt64(i) * 8))
+            b[8 + i] = UInt8(truncatingIfNeeded: h2 >> (UInt64(i) * 8))
+        }
+        b[6] = (b[6] & 0x0F) | 0x50 // version 5 style
+        b[8] = (b[8] & 0x3F) | 0x80 // RFC 4122 variant
+        return UUID(uuid: (b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+                           b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]))
+    }
+}
+
+extension WorkoutProgram {
+    /// Copy with ids derived from `namespace` + position + name, so the same
+    /// plan always has the same ids and logged sets stay attached to it.
+    func stabilized(namespace: String) -> WorkoutProgram {
+        let newDays = days.enumerated().map { dayIndex, day in
+            WorkoutDay(
+                id: .stable("\(namespace)|day\(dayIndex)|\(day.title)"),
+                title: day.title,
+                focus: day.focus,
+                exercises: day.exercises.enumerated().map { exIndex, ex in
+                    Exercise(
+                        id: .stable("\(namespace)|day\(dayIndex)|ex\(exIndex)|\(ex.name)"),
+                        name: ex.name, muscleGroup: ex.muscleGroup, sets: ex.sets,
+                        reps: ex.reps, restSeconds: ex.restSeconds, description: ex.description
+                    )
+                }
+            )
+        }
+        return WorkoutProgram(
+            id: .stable("\(namespace)|program"),
+            name: name, summary: summary, level: level, goal: goal,
+            daysPerWeek: daysPerWeek, days: newDays
+        )
+    }
+}
+
 // MARK: - Set logging
 
 struct LoggedSet: Identifiable, Codable, Equatable {

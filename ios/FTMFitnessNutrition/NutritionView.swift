@@ -8,19 +8,34 @@ import SwiftUI
 /// Nutrition tab: daily food log grouped by meal, add-food sheet, live macro totals.
 struct NutritionView: View {
     @Environment(AppModel.self) private var app
-    @State private var showingAddFood = false
+    @Environment(StoreService.self) private var store
+    @State private var historyRange: Int = 7
+    @State private var selectedDate: Date = Calendar.current.startOfDay(for: Date())
+    @State private var addFoodRequest: AddFoodRequest? = nil
+    @State private var editingItem: LoggedFood? = nil
+    @State private var lastDeleted: LoggedFood? = nil
+
+    /// What the Add Food sheet should open with.
+    private struct AddFoodRequest: Identifiable {
+        let id = UUID()
+        var meal: MealType? = nil
+        var scanner: Bool = false
+    }
+
+    private var isToday: Bool { Calendar.current.isDateInToday(selectedDate) }
 
     var body: some View {
         @Bindable var app = app
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    summaryCard
-                    historySection
                     dateHeader
+                    summaryCard
+                    scanMealCard
                     ForEach(MealType.allCases) { meal in
                         mealSection(meal)
                     }
+                    historySection
                     Spacer(minLength: 12)
                 }
                 .padding(.horizontal, 16)
@@ -31,7 +46,7 @@ struct NutritionView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        showingAddFood = true
+                        addFoodRequest = AddFoodRequest()
                     } label: {
                         Image(systemName: "plus.circle.fill")
                             .foregroundStyle(TF.blue)
@@ -40,17 +55,99 @@ struct NutritionView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingAddFood) {
-            AddFoodSheet()
+        .sheet(item: $addFoodRequest) { request in
+            AddFoodSheet(date: selectedDate, initialMeal: request.meal, startWithScanner: request.scanner)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
+        .sheet(item: $editingItem) { item in
+            EditLoggedFoodSheet(item: item, date: selectedDate)
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+        }
+        .overlay(alignment: .bottom) { undoBar }
+    }
+
+    // MARK: Undo
+
+    @ViewBuilder
+    private var undoBar: some View {
+        if let item = lastDeleted {
+            HStack(spacing: 12) {
+                Text("Removed \(item.food.displayName)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(TF.text)
+                    .lineLimit(1)
+                Spacer()
+                Button("Undo") {
+                    app.restoreFood(item, on: selectedDate)
+                    withAnimation { lastDeleted = nil }
+                }
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(TF.blue)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(RoundedRectangle(cornerRadius: TF.cornerM).fill(TF.card))
+            .overlay(RoundedRectangle(cornerRadius: TF.cornerM).strokeBorder(TF.border, lineWidth: 1))
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .task(id: item.id) {
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { return }
+                withAnimation { if lastDeleted?.id == item.id { lastDeleted = nil } }
+            }
+        }
+    }
+
+    private func delete(_ item: LoggedFood) {
+        app.removeFood(item.id, on: selectedDate)
+        withAnimation { lastDeleted = item }
+    }
+
+    // MARK: Scan a meal (headline feature, one tap from the tab)
+
+    private var scanMealCard: some View {
+        Button {
+            addFoodRequest = AddFoodRequest(scanner: true)
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(TF.blue.opacity(0.16))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "camera.viewfinder")
+                        .font(.title3)
+                        .foregroundStyle(TF.blue)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Scan a meal")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(TF.text)
+                    Text("Snap your plate, AI fills in calories and macros")
+                        .font(.caption)
+                        .foregroundStyle(TF.textSecondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(TF.textSecondary)
+            }
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: TF.cornerM).fill(TF.blue.opacity(0.10)))
+            .overlay(
+                RoundedRectangle(cornerRadius: TF.cornerM)
+                    .strokeBorder(TF.blue.opacity(0.35), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: Summary card
 
     private var totals: (cal: Double, pro: Double, carb: Double, fat: Double) {
-        app.nutritionTotals()
+        app.nutritionTotals(on: selectedDate)
     }
 
     @ViewBuilder
@@ -62,7 +159,7 @@ struct NutritionView: View {
         TFCard {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    Text("Today's Nutrition")
+                    Text(isToday ? "Today's Nutrition" : "Nutrition")
                         .font(.headline.weight(.bold))
                     Spacer()
                     Text("\(Int(t.cal.rounded())) / \(app.profile.targetCalories) kcal")
@@ -73,12 +170,22 @@ struct NutritionView: View {
                     ProgressRing(progress: progress, color: TF.blue, size: 72, label: "\(Int((progress*100).rounded()))%")
                     VStack(alignment: .leading, spacing: 4) {
                         let remaining = max(0, calTarget - t.cal)
-                        Text("\(Int(remaining.rounded())) kcal left")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(TF.blue)
-                        Text("Fuel your body well today.")
-                            .font(.caption)
-                            .foregroundStyle(TF.textSecondary)
+                        let over = t.cal - calTarget
+                        if calTarget > 0 && over >= 1 {
+                            Text("\(Int(over.rounded())) kcal over")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(TF.warning)
+                            Text("No stress. One day doesn't make a trend.")
+                                .font(.caption)
+                                .foregroundStyle(TF.textSecondary)
+                        } else {
+                            Text("\(Int(remaining.rounded())) kcal left")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(TF.blue)
+                            Text("Fuel your body well today.")
+                                .font(.caption)
+                                .foregroundStyle(TF.textSecondary)
+                        }
                     }
                     Spacer()
                 }
@@ -110,92 +217,190 @@ struct NutritionView: View {
         .background(RoundedRectangle(cornerRadius: 10).fill(color.opacity(0.10)))
     }
 
-    // MARK: Last 7 days (free) + full history (Premium)
+    // MARK: History: last 7 days (free), 30 / 90 days (Premium)
 
     private var historySection: some View {
         VStack(spacing: 10) {
             TFCard {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Text("Last 7 days")
+                        Text("Last \(historyRange) days")
                             .font(.headline.weight(.bold))
                         Spacer()
-                        Text("calories vs goal")
-                            .font(.caption)
-                            .foregroundStyle(TF.textSecondary)
+                        if store.isPremium {
+                            Picker("Range", selection: $historyRange) {
+                                Text("7D").tag(7)
+                                Text("30D").tag(30)
+                                Text("90D").tag(90)
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 150)
+                        } else {
+                            Text("calories vs goal")
+                                .font(.caption)
+                                .foregroundStyle(TF.textSecondary)
+                        }
                     }
-                    sevenDayBars
+                    historyBars
+                    historyAverages
                 }
             }
-            LockedFeatureCard(
-                icon: "chart.line.uptrend.xyaxis",
-                title: "Full history & progress analytics",
-                message: "Unlock complete weight, macro, and strength trends with unlimited lookback.",
-                context: .fullHistory
-            )
+            if !store.isPremium {
+                LockedFeatureCard(
+                    icon: "chart.line.uptrend.xyaxis",
+                    title: "30 and 90 day trends",
+                    message: "See your calorie and protein averages across the last month and quarter, not just this week.",
+                    context: .fullHistory
+                )
+            }
         }
     }
 
-    /// Simple 7-day calorie bars — free users see one week of history.
-    private var sevenDayBars: some View {
+    private struct HistoryDay {
+        let date: Date
+        let cal: Double
+        let pro: Double
+    }
+
+    private var historyDays: [HistoryDay] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let range = store.isPremium ? historyRange : 7
+        var result: [HistoryDay] = []
+        for offset in stride(from: range - 1, through: 0, by: -1) {
+            guard let date = calendar.date(byAdding: .day, value: -offset, to: today) else { continue }
+            let t = app.nutritionTotals(on: date)
+            result.append(HistoryDay(date: date, cal: t.cal, pro: t.pro))
+        }
+        return result
+    }
+
+    /// Calorie bars vs goal. Day letters only on the 7-day view.
+    private var historyBars: some View {
         let cal = Calendar.current
         let target = max(Double(app.profile.targetCalories), 1)
-        let today = cal.startOfDay(for: Date())
-        let days: [(label: String, value: Double)] = stride(from: 6, through: 0, by: -1).compactMap { offset in
-            guard let date = cal.date(byAdding: .day, value: -offset, to: today) else { return nil }
-            let value = app.nutritionTotals(on: date).cal
-            let idx = cal.component(.weekday, from: date)
-            let label = String(cal.veryShortWeekdaySymbols[idx - 1].prefix(1))
-            return (label, value)
-        }
-        return HStack(alignment: .bottom, spacing: 8) {
+        let days = historyDays
+        let spacing: CGFloat = days.count <= 7 ? 8 : (days.count <= 30 ? 3 : 1)
+        return HStack(alignment: .bottom, spacing: spacing) {
             ForEach(Array(days.enumerated()), id: \.offset) { idx, day in
                 VStack(spacing: 4) {
                     ZStack(alignment: .bottom) {
                         Capsule().fill(TF.input)
                         Capsule()
-                            .fill(day.value > 0 ? TF.blue : Color.clear)
-                            .frame(height: max(5, 56 * min(day.value / target, 1)))
+                            .fill(day.cal > target * 1.05 ? TF.warning : (day.cal > 0 ? TF.blue : Color.clear))
+                            .frame(height: max(day.cal > 0 ? 5 : 0, 56 * min(day.cal / target, 1)))
                     }
                     .frame(height: 56)
-                    Text(day.label)
-                        .font(.caption2.weight(idx == days.count - 1 ? .bold : .regular))
-                        .foregroundStyle(idx == days.count - 1 ? TF.text : TF.textSecondary)
+                    if days.count <= 7 {
+                        let weekday = cal.component(.weekday, from: day.date)
+                        Text(String(cal.veryShortWeekdaySymbols[weekday - 1].prefix(1)))
+                            .font(.caption2.weight(idx == days.count - 1 ? .bold : .regular))
+                            .foregroundStyle(idx == days.count - 1 ? TF.text : TF.textSecondary)
+                    }
                 }
                 .frame(maxWidth: .infinity)
             }
         }
-        .frame(height: 78)
+        .frame(height: days.count <= 7 ? 78 : 60)
     }
 
-    // MARK: Date header
-
-    private var dateHeader: some View {
-        HStack {
+    /// Averages over days that have anything logged.
+    private var historyAverages: some View {
+        let logged = historyDays.filter { $0.cal > 0 }
+        let n = Double(max(logged.count, 1))
+        let avgCal = logged.reduce(0) { $0 + $1.cal } / n
+        let avgPro = logged.reduce(0) { $0 + $1.pro } / n
+        return HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Today's log")
-                    .font(.title3.weight(.bold))
+                Text(logged.isEmpty ? "—" : "\(Int(avgCal.rounded()))")
+                    .font(.subheadline.weight(.bold))
                     .foregroundStyle(TF.text)
-                Text(formattedToday)
-                    .font(.footnote)
+                Text("avg kcal")
+                    .font(.caption2)
+                    .foregroundStyle(TF.textSecondary)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(logged.isEmpty ? "—" : "\(Int(avgPro.rounded()))g")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(TF.protein)
+                Text("avg protein")
+                    .font(.caption2)
+                    .foregroundStyle(TF.textSecondary)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(logged.count)/\(historyDays.count)")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(TF.text)
+                Text("days logged")
+                    .font(.caption2)
                     .foregroundStyle(TF.textSecondary)
             }
             Spacer()
         }
-        .padding(.top, 4)
     }
 
-    private var formattedToday: String {
-        let f = DateFormatter()
-        f.dateFormat = "EEEE, MMM d"
-        return f.string(from: Date())
+    // MARK: Date header (switch days to log yesterday etc.)
+
+    private var dateHeader: some View {
+        HStack(spacing: 12) {
+            Button {
+                shiftDay(-1)
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.subheadline.weight(.bold))
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(TF.input))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(TF.text)
+            .accessibilityLabel("Previous day")
+
+            VStack(spacing: 2) {
+                Text(dayTitle)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(TF.text)
+                Text(selectedDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+                    .font(.caption)
+                    .foregroundStyle(TF.textSecondary)
+            }
+            .frame(maxWidth: .infinity)
+            .onTapGesture { withAnimation { selectedDate = Calendar.current.startOfDay(for: Date()) } }
+
+            Button {
+                shiftDay(1)
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.subheadline.weight(.bold))
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(TF.input))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(isToday ? TF.textSecondary.opacity(0.4) : TF.text)
+            .disabled(isToday)
+            .accessibilityLabel("Next day")
+        }
+    }
+
+    private var dayTitle: String {
+        let cal = Calendar.current
+        if cal.isDateInToday(selectedDate) { return "Today" }
+        if cal.isDateInYesterday(selectedDate) { return "Yesterday" }
+        return selectedDate.formatted(.dateTime.month(.abbreviated).day())
+    }
+
+    private func shiftDay(_ delta: Int) {
+        let cal = Calendar.current
+        guard let next = cal.date(byAdding: .day, value: delta, to: selectedDate) else { return }
+        guard next <= cal.startOfDay(for: Date()) else { return }
+        lastDeleted = nil
+        withAnimation(.easeOut(duration: 0.15)) { selectedDate = next }
     }
 
     // MARK: Meal section
 
     @ViewBuilder
     private func mealSection(_ meal: MealType) -> some View {
-        let items = app.foods().filter { $0.meal == meal }
+        let items = app.foods(on: selectedDate).filter { $0.meal == meal }
         TFCard {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
@@ -210,7 +415,7 @@ struct NutritionView: View {
                             .foregroundStyle(TF.textSecondary)
                     }
                     Button {
-                        showingAddFood = true
+                        addFoodRequest = AddFoodRequest(meal: meal)
                     } label: {
                         Image(systemName: "plus")
                             .font(.caption.weight(.bold))
@@ -222,7 +427,7 @@ struct NutritionView: View {
                 }
 
                 if items.isEmpty {
-                    Text("Nothing logged yet. Start logging to track your day.")
+                    Text("Nothing logged yet.")
                         .font(.footnote)
                         .foregroundStyle(TF.textSecondary)
                         .padding(.vertical, 4)
@@ -230,6 +435,8 @@ struct NutritionView: View {
                     VStack(spacing: 8) {
                         ForEach(items) { item in
                             foodRow(item)
+                                .contentShape(Rectangle())
+                                .onTapGesture { editingItem = item }
                         }
                     }
                 }
@@ -260,7 +467,7 @@ struct NutritionView: View {
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(TF.blue)
                 Button {
-                    app.removeFood(item.id)
+                    delete(item)
                 } label: {
                     Image(systemName: "trash")
                         .font(.caption)
@@ -305,6 +512,13 @@ struct AddFoodSheet: View {
     @Environment(StoreService.self) private var store
     @Environment(\.dismiss) private var dismiss
 
+    /// Day the food is logged to (Nutrition's selected day).
+    var date: Date = Date()
+    /// Meal to preselect, e.g. when opened from that meal's "+".
+    var initialMeal: MealType? = nil
+    /// Open straight into the meal scanner.
+    var startWithScanner: Bool = false
+
     private enum Mode { case search, configure, custom, quickAdd }
     @State private var mode: Mode = .search
 
@@ -325,6 +539,7 @@ struct AddFoodSheet: View {
     @State private var showingLimitPaywall: Bool = false
     @State private var scanRemaining: Int? = nil
     @State private var scanNotice: String? = nil
+    @State private var didAutoOpenScanner = false
 
     // Custom food form
     @State private var customName: String = ""
@@ -385,7 +600,7 @@ struct AddFoodSheet: View {
             .sheet(isPresented: $showingMealScanner) {
                 MealScannerView { foods, meal in
                     for food in foods {
-                        app.addFood(food, servings: 1, meal: meal)
+                        app.addFood(food, servings: 1, meal: meal, on: date)
                     }
                 }
             }
@@ -396,7 +611,20 @@ struct AddFoodSheet: View {
                 guard !store.isPremium else { return }
                 scanRemaining = await MealScanService.shared.remainingScans()
             }
+            .onAppear {
+                meal = initialMeal ?? Self.suggestedMeal()
+                if startWithScanner, !didAutoOpenScanner {
+                    didAutoOpenScanner = true
+                    showingMealScanner = true
+                }
+            }
             .onChange(of: showingMealScanner) { _, isShowing in
+                // Opened straight into the scanner from Nutrition: closing the
+                // scanner closes this sheet too, back to the day's log.
+                if !isShowing && startWithScanner {
+                    dismiss()
+                    return
+                }
                 guard !isShowing, !store.isPremium else { return }
                 Task { scanRemaining = await MealScanService.shared.remainingScans() }
             }
@@ -797,7 +1025,7 @@ struct AddFoodSheet: View {
         selectedFood = food
         selectedPortionID = food.portionOptions.first?.id ?? "listed"
         quantityText = "1"
-        meal = Self.suggestedMeal()
+        meal = initialMeal ?? Self.suggestedMeal()
         withAnimation(.easeOut(duration: 0.15)) { mode = .configure }
     }
 
@@ -1060,10 +1288,11 @@ struct AddFoodSheet: View {
                 food,
                 servings: grams / 100,
                 meal: meal,
-                portionLabel: portionLabel(for: food)
+                portionLabel: portionLabel(for: food),
+                on: date
             )
         } else {
-            app.addFood(food, servings: max(quantity, 0.5), meal: meal)
+            app.addFood(food, servings: max(quantity, 0.5), meal: meal, on: date)
         }
         dismiss()
     }
@@ -1168,7 +1397,7 @@ struct AddFoodSheet: View {
                 : customBrand.trimmingCharacters(in: .whitespaces),
             source: .custom
         )
-        app.addFood(food, servings: 1, meal: meal)
+        app.addFood(food, servings: 1, meal: meal, on: date)
         dismiss()
     }
 
@@ -1225,11 +1454,96 @@ struct AddFoodSheet: View {
             fat: Int(Double(quickFat) ?? 0),
             source: .custom
         )
-        app.addFood(food, servings: 1, meal: meal)
+        app.addFood(food, servings: 1, meal: meal, on: date)
         dismiss()
     }
 }
 
 #Preview {
     NutritionView().environment(AppModel())
+}
+
+// MARK: - Edit a logged item
+
+/// Change the meal or amount of something already logged, or remove it.
+struct EditLoggedFoodSheet: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+
+    let item: LoggedFood
+    let date: Date
+
+    @State private var meal: MealType = .breakfast
+    @State private var amount: Double = 1
+
+    /// Weighed entries ("150 g") keep their label, so scale them as a
+    /// multiple of the logged portion; others edit servings directly.
+    private var isPortion: Bool { item.portionLabel != nil }
+
+    private var newServings: Double {
+        isPortion ? item.servings * amount : amount
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.food.displayName)
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(TF.text)
+                    Text("\(Int((Double(item.food.calories) * newServings).rounded())) kcal · P \(Int((Double(item.food.protein) * newServings).rounded()))g · C \(Int((Double(item.food.carbs) * newServings).rounded()))g · F \(Int((Double(item.food.fat) * newServings).rounded()))g")
+                        .font(.caption)
+                        .foregroundStyle(TF.textSecondary)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(isPortion ? "Amount (× \(item.portionLabel ?? "portion"))" : "Servings (\(item.food.serving))")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(TF.text)
+                    Stepper(value: $amount, in: 0.25...20, step: 0.25) {
+                        Text(Self.format(amount))
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(TF.text)
+                            .monospacedDigit()
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Meal")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(TF.text)
+                    Picker("Meal", selection: $meal) {
+                        ForEach(MealType.allCases) { m in
+                            Text(m.rawValue).tag(m)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Spacer(minLength: 0)
+
+                TFButton(title: "Save", systemImage: "checkmark", style: .primary) {
+                    app.updateFood(item.id, on: date, servings: newServings, meal: meal)
+                    dismiss()
+                }
+            }
+            .padding(16)
+            .background(TF.bg.ignoresSafeArea())
+            .navigationTitle("Edit entry")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }.foregroundStyle(TF.blue)
+                }
+            }
+        }
+        .onAppear {
+            meal = item.meal
+            amount = isPortion ? 1 : min(max(item.servings, 0.25), 20)
+        }
+    }
+
+    private static func format(_ v: Double) -> String {
+        v == v.rounded() ? String(Int(v)) : String(format: "%g", v)
+    }
 }

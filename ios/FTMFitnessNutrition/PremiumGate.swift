@@ -149,11 +149,11 @@ extension PaywallContext {
         headline: "Custom goals are part of Premium",
         message: "Set your own calorie and macro targets.")
     static let programs = PaywallContext(
-        headline: "Programs are part of Premium",
-        message: "Unlock every workout program and routine.")
+        headline: "Your custom plan is part of Premium",
+        message: "Get a program built for your goal, schedule and equipment, adjusted by your weekly check-ins. Ready-made plans stay free.")
     static let fullHistory = PaywallContext(
-        headline: "Full history is part of Premium",
-        message: "See every trend — weight, macros, and strength — with unlimited lookback.")
+        headline: "30 and 90 day trends are part of Premium",
+        message: "See your calorie and protein averages across the last month and quarter.")
     static let scanLimit = PaywallContext(
         headline: "You've used your free scans this week",
         message: "Go unlimited with Premium — plus the barcode scanner and custom goals.")

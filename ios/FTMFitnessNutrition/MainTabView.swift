@@ -17,11 +17,13 @@ struct MainTabView: View {
     var body: some View {
         @Bindable var app = app
         TabView(selection: $app.selectedTab) {
-            HomeView().tag(AppTab.home)
-            TrainView().tag(AppTab.train)
-            NutritionView().tag(AppTab.eat)
-            CommunityView().tag(AppTab.community)
-            ProfileView().tag(AppTab.profile)
+            // The custom bar below replaces the system one; hide the system
+            // bar so an empty strip doesn't sit under it on device.
+            HomeView().tag(AppTab.home).toolbar(.hidden, for: .tabBar)
+            TrainView().tag(AppTab.train).toolbar(.hidden, for: .tabBar)
+            NutritionView().tag(AppTab.eat).toolbar(.hidden, for: .tabBar)
+            CommunityView().tag(AppTab.community).toolbar(.hidden, for: .tabBar)
+            ProfileView().tag(AppTab.profile).toolbar(.hidden, for: .tabBar)
         }
         .background(TF.bg.ignoresSafeArea())
         .safeAreaInset(edge: .bottom, spacing: 0) { tabBar }
@@ -31,6 +33,14 @@ struct MainTabView: View {
         .sheet(isPresented: $app.showPostOnboardingPaywall) {
             PaywallView(context: .postOnboarding)
                 .onAppear { store.markAutoPaywallShown() }
+        }
+        // Ask for notification permission once the user is in the app and
+        // no paywall is covering it, instead of on the launch splash.
+        .task(id: app.showPostOnboardingPaywall) {
+            guard !app.showPostOnboardingPaywall, app.checkInRemindersOn else { return }
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            await CheckInReminder.requestAndSchedule()
         }
     }
 

@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 /// Train tab: today's workout with inline set logging, plus program browsing.
 /// Designed for 1-2 tap logging — no deep navigation needed to log sets.
@@ -72,11 +73,36 @@ struct TrainView: View {
                 Text(day.focus)
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.85))
-                Text("Log your sets inline below — no menus, just lift.")
+                Text("Log your sets inline below. No menus, just lift.")
                     .font(.footnote)
                     .foregroundStyle(.white.opacity(0.7))
                     .padding(.top, 4)
+                sessionPicker(title: "Switch session")
             }
+        }
+    }
+
+    /// Lets people train a different day than scheduled, or on a rest day.
+    @ViewBuilder
+    private func sessionPicker(title: String) -> some View {
+        if let program = app.activeProgram, !program.days.isEmpty {
+            Menu {
+                ForEach(program.days) { day in
+                    Button(day.title) { app.chooseTodaySession(day) }
+                }
+                if app.hasTodayOverride {
+                    Divider()
+                    Button("Back to the schedule") { app.chooseTodaySession(nil) }
+                }
+            } label: {
+                Label(title, systemImage: "arrow.triangle.swap")
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Capsule().fill(.white.opacity(0.2)))
+            }
+            .padding(.top, 6)
         }
     }
 
@@ -88,6 +114,7 @@ struct TrainView: View {
                 Text("Recovery is part of the work. Move gently, hydrate, and fuel well. Your body grows when you rest.")
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.85))
+                sessionPicker(title: "Train anyway")
             }
         }
     }
@@ -151,6 +178,7 @@ struct InlineExerciseCard: View {
     @State private var weightInput: String = ""
     @State private var repsInput: String = ""
     @State private var showingDescription: Bool = false
+    @State private var restEndsAt: Date? = nil
     @FocusState private var weightFocused: Bool
 
     var body: some View {
@@ -211,9 +239,13 @@ struct InlineExerciseCard: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
-                // Inline set logging — weight + reps + add button
+                if let last = app.lastSession(forExercise: exercise.id) {
+                    lastTimeLine(last)
+                }
+
+                // Inline set logging: weight + reps + add button
                 HStack(spacing: 10) {
-                    inputField("kg", text: $weightInput)
+                    inputField(app.weightUnit.label, text: $weightInput)
                         .keyboardType(.decimalPad)
                         .focused($weightFocused)
                     inputField("reps", text: $repsInput)
@@ -239,7 +271,7 @@ struct InlineExerciseCard: View {
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(TF.text)
                                 Spacer()
-                                Text("\(String(format: "%g", s.weight)) kg × \(s.reps)")
+                                Text("\(app.weightLabel(fromKg: s.weight)) × \(s.reps)")
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(.secondary)
                                 Button {
@@ -257,8 +289,67 @@ struct InlineExerciseCard: View {
                         }
                     }
                 }
+
+                if let restEndsAt {
+                    restTimer(until: restEndsAt)
+                }
             }
         }
+    }
+
+    private func lastTimeLine(_ last: (date: Date, sets: [LoggedSet])) -> some View {
+        let best = last.sets.max { ($0.weight, $0.reps) < ($1.weight, $1.reps) }
+        let summary = last.sets
+            .map { "\(app.weightLabel(fromKg: $0.weight)) × \($0.reps)" }
+            .joined(separator: ", ")
+        return HStack(spacing: 6) {
+            Image(systemName: "clock.arrow.circlepath")
+            Text("Last time (\(last.date.formatted(.dateTime.month(.abbreviated).day()))): \(summary)")
+                .lineLimit(2)
+            Spacer(minLength: 0)
+            if let best, weightInput.isEmpty {
+                Button("Use") {
+                    weightInput = Self.trimmed(app.displayWeight(fromKg: best.weight))
+                    repsInput = String(best.reps)
+                }
+                .font(.caption.weight(.bold))
+                .foregroundStyle(TF.blue)
+                .buttonStyle(.plain)
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+
+    /// Countdown after each logged set, from the exercise's rest time.
+    private func restTimer(until end: Date) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let left = max(0, Int(end.timeIntervalSince(context.date).rounded(.up)))
+            HStack(spacing: 8) {
+                Image(systemName: left == 0 ? "bell.fill" : "timer")
+                Text(left == 0 ? "Rest done. Next set!" : "Rest \(left / 60):\(String(format: "%02d", left % 60))")
+                    .monospacedDigit()
+                Spacer()
+                Button(left == 0 ? "OK" : "Skip") {
+                    withAnimation { restEndsAt = nil }
+                }
+                .font(.caption.weight(.bold))
+                .buttonStyle(.plain)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(left == 0 ? TF.success : TF.blue)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 8).fill(TF.blue.opacity(0.12)))
+            .onChange(of: left == 0) { _, done in
+                if done { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+            }
+        }
+    }
+
+    private static func trimmed(_ v: Double) -> String {
+        let r = (v * 10).rounded() / 10
+        return r == r.rounded() ? String(Int(r)) : String(format: "%.1f", r)
     }
 
     @ViewBuilder
@@ -276,10 +367,13 @@ struct InlineExerciseCard: View {
     private func logSet() {
         guard let w = Double(weightInput.replacingOccurrences(of: ",", with: ".")),
               let r = Int(repsInput), r > 0, w >= 0 else { return }
-        app.addSet(toExercise: exercise.id, weight: w, reps: r)
-        weightInput = ""
+        app.addSet(toExercise: exercise.id, weight: app.kg(fromDisplay: w), reps: r)
+        // Keep the weight for the next set; clear reps.
         repsInput = ""
-        weightFocused = true
+        weightFocused = false
+        if exercise.restSeconds > 0 {
+            withAnimation { restEndsAt = Date().addingTimeInterval(TimeInterval(exercise.restSeconds)) }
+        }
     }
 }
 

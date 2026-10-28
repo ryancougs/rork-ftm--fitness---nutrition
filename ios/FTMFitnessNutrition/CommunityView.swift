@@ -18,6 +18,7 @@ struct CommunityView: View {
     @State private var showingGuidelines = false
     @State private var reportingPost: SupabaseService.CommunityPost? = nil
     @State private var deletingPost: SupabaseService.CommunityPost? = nil
+    @State private var blockingPost: SupabaseService.CommunityPost? = nil
     @State private var reportSubmitted = false
     @State private var coachCategory: CoachCategory? = nil
     @State private var showingCoachPaywall = false
@@ -43,10 +44,10 @@ struct CommunityView: View {
                             .padding(.vertical, 40)
                     } else if let loadError {
                         errorCard(loadError)
-                    } else if posts.isEmpty {
+                    } else if visiblePosts.isEmpty {
                         emptyStateCard
                     } else {
-                        ForEach(posts) { post in
+                        ForEach(visiblePosts) { post in
                             postCard(post)
                         }
                     }
@@ -96,6 +97,20 @@ struct CommunityView: View {
             } message: {
                 Text("This removes your post for everyone. This can't be undone.")
             }
+            .confirmationDialog("Block \(blockingPost?.displayName ?? "this person")?", isPresented: Binding(
+                get: { blockingPost != nil },
+                set: { if !$0 { blockingPost = nil } }
+            ), titleVisibility: .visible) {
+                Button("Block", role: .destructive) {
+                    if let post = blockingPost {
+                        app.block(userID: post.userId)
+                    }
+                    blockingPost = nil
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("You won't see their posts anymore. They aren't told you blocked them.")
+            }
             .alert("Report submitted", isPresented: $reportSubmitted) {
                 Button("OK", role: .cancel) {}
             } message: {
@@ -108,6 +123,10 @@ struct CommunityView: View {
     }
 
     // MARK: Data
+
+    private var visiblePosts: [SupabaseService.CommunityPost] {
+        posts.filter { !app.isBlocked($0.userId) }
+    }
 
     private func load() async {
         do {
@@ -352,7 +371,9 @@ struct CommunityView: View {
     // MARK: Post card
 
     private func isOwnPost(_ post: SupabaseService.CommunityPost) -> Bool {
-        post.userId == SupabaseService.shared.currentUserID
+        // Postgres returns lowercase UUIDs; Swift's uuidString is uppercase.
+        guard let me = SupabaseService.shared.currentUserID else { return false }
+        return post.userId.caseInsensitiveCompare(me) == .orderedSame
     }
 
     @ViewBuilder
@@ -389,6 +410,11 @@ struct CommunityView: View {
                                 reportingPost = post
                             } label: {
                                 Label("Report", systemImage: "exclamationmark.bubble")
+                            }
+                            Button(role: .destructive) {
+                                blockingPost = post
+                            } label: {
+                                Label("Block \(post.displayName)", systemImage: "hand.raised.fill")
                             }
                         }
                     } label: {

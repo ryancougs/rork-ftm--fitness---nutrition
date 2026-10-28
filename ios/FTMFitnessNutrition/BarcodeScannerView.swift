@@ -16,10 +16,13 @@ struct BarcodeScannerView: View {
 
     @State private var permission: PermissionState = .checking
     @State private var cameraAvailable: Bool = true
+    @State private var handled = false
 
     private enum PermissionState { case checking, granted, denied }
 
     var body: some View {
+        // NavigationStack so the Cancel toolbar button actually shows up.
+        NavigationStack {
         ZStack {
             TF.bg.ignoresSafeArea()
             switch permission {
@@ -42,6 +45,8 @@ struct BarcodeScannerView: View {
                 Button("Cancel") { dismiss() }
                     .foregroundStyle(TF.blue)
             }
+        }
+        .toolbarBackground(.hidden, for: .navigationBar)
         }
         .task { await checkPermission() }
     }
@@ -103,6 +108,9 @@ struct BarcodeScannerView: View {
     }
 
     private func handleCode(_ code: String) {
+        // Only the first read counts; a second code in frame must not log twice.
+        guard !handled else { return }
+        handled = true
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         onCode(code)
         dismiss()
@@ -160,6 +168,8 @@ private final class ScannerPreviewView: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = UIColor.black
+        // Without this the preview layer has nothing to draw and stays black.
+        previewLayer.session = session
         previewLayer.videoGravity = .resizeAspectFill
     }
 
@@ -177,15 +187,16 @@ private final class ScannerPreviewView: UIView {
         }
     }
 
-    private func configureAndRun() {
-        let discovery = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.external, .builtInWideAngleCamera],
-            mediaType: .video,
-            // .unspecified so the preview's injected external webcam matches
-            // (external cameras report position .unspecified, not .back).
-            position: .unspecified
-        )
-        guard let device = discovery.devices.first,
+    private nonisolated func configureAndRun() {
+        // Back camera on a real iPhone; any camera (e.g. the preview's
+        // injected webcam) as a fallback.
+        let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+            ?? AVCaptureDevice.DiscoverySession(
+                deviceTypes: [.external, .builtInWideAngleCamera],
+                mediaType: .video,
+                position: .unspecified
+            ).devices.first
+        guard let device,
               let input = try? AVCaptureDeviceInput(device: device),
               session.canAddInput(input) else {
             Task { @MainActor in onUnavailable?() }

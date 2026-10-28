@@ -292,12 +292,12 @@ struct CheckInContent: View {
                     Text("Progress photos")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(TF.text)
-                    Text("A front-on photo is required so we can track your physique over time — no face needed. Side, back, and a favorite pose are optional. These stay on your device and are only visible to you.")
+                    Text("Optional, and no face needed. A front-on photo each week makes progress easier to see. Photos stay on this phone only: they aren't uploaded, so they won't carry over to a new phone.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 10) {
-                        photoSlot(title: "Front", required: true, data: frontPhoto, item: $frontItem)
+                        photoSlot(title: "Front", required: false, data: frontPhoto, item: $frontItem)
                         photoSlot(title: "Side", required: false, data: sidePhoto, item: $sideItem)
                         photoSlot(title: "Back", required: false, data: backPhoto, item: $backItem)
                         photoSlot(title: "Pose", required: false, data: posePhoto, item: $poseItem)
@@ -308,7 +308,7 @@ struct CheckInContent: View {
 
                 // Notes
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Anything you want Mason to know this week?")
+                    Text("Anything worth noting about this week?")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(TF.text)
                     TextEditor(text: $notes)
@@ -323,10 +323,9 @@ struct CheckInContent: View {
                 }
 
                 TFButton(
-                    title: frontPhoto == nil ? "Add your front-on photo to save" : "Save check-in",
-                    systemImage: frontPhoto == nil ? "camera.fill" : "checkmark",
-                    style: .primary,
-                    disabled: frontPhoto == nil
+                    title: "Save check-in",
+                    systemImage: "checkmark",
+                    style: .primary
                 ) {
                     let checkIn = WeeklyCheckIn(
                         weekStart: app.currentWeekStart,

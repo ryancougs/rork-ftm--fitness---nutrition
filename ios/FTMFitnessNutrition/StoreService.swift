@@ -133,6 +133,7 @@ final class StoreService {
     /// Starts a purchase. Returns true when the purchase completed (not cancelled).
     @discardableResult
     func purchase(_ package: Package) async -> Bool {
+        guard Purchases.isConfigured else { return false }
         do {
             let result = try await Purchases.shared.purchase(package: package)
             apply(result.customerInfo)
@@ -146,6 +147,9 @@ final class StoreService {
     /// Restores previous purchases on this Apple ID.
     @discardableResult
     func restore() async -> Bool {
+        // Restore is now reachable for free users too; never touch
+        // Purchases.shared before it's configured (that crashes).
+        guard Purchases.isConfigured else { return false }
         do {
             let info = try await Purchases.shared.restorePurchases()
             apply(info)

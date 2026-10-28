@@ -17,7 +17,7 @@ enum CheckInReminder {
 
         let content = UNMutableNotificationContent()
         content.title = "Keep winning 💪"
-        content.body = "Your weekly check-in is ready — two minutes to log how the week felt. Mason reads every one."
+        content.body = "Your weekly check-in is ready. Two minutes to log how the week felt, and your plan adjusts to it."
         content.sound = .default
 
         var components = DateComponents()
@@ -26,5 +26,9 @@ enum CheckInReminder {
         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
         let request = UNNotificationRequest(identifier: "weekly_checkin", content: content, trigger: trigger)
         try? await center.add(request)
+    }
+
+    static func cancel() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["weekly_checkin"])
     }
 }

@@ -185,7 +185,6 @@ struct MealScannerView: View {
         ) {
             TFButton(title: "Try again", systemImage: "arrow.clockwise", style: .primary) {
                 phase = .camera
-                captureTrigger += 1
             }
         }
     }
@@ -235,7 +234,6 @@ struct MealScannerView: View {
                 }
                 Button {
                     phase = .camera
-                    captureTrigger += 1
                 } label: {
                     Label("Retake photo", systemImage: "arrow.counterclockwise")
                         .font(.subheadline.weight(.semibold))
@@ -402,7 +400,6 @@ struct MealScannerView: View {
         foods.removeAll { $0.id == food.id }
         if foods.isEmpty {
             phase = .camera
-            captureTrigger += 1
         } else {
             withAnimation(.easeOut(duration: 0.15)) { phase = .results(foods) }
         }
@@ -433,10 +430,11 @@ private struct MealCameraPreview: UIViewRepresentable {
     let onPhoto: (Data?) -> Void
     let onUnavailable: () -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> Coordinator { Coordinator(lastTrigger: captureTrigger) }
 
     final class Coordinator {
-        var lastTrigger = 0
+        var lastTrigger: Int
+        init(lastTrigger: Int) { self.lastTrigger = lastTrigger }
     }
 
     func makeUIView(context: Context) -> MealPreviewView {
@@ -471,20 +469,14 @@ final class MealPreviewView: UIView {
         self.onPhoto = onPhoto
         self.onUnavailable = onUnavailable
         backgroundColor = .black
+        // Without this the preview layer has nothing to draw and stays black.
+        previewLayer.session = session
         previewLayer.videoGravity = .resizeAspectFill
         sessionQueue.async { self.setupSession() }
     }
 
     private nonisolated func setupSession() {
-        let discovery = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.builtInWideAngleCamera, .external],
-            mediaType: .video,
-            // .unspecified matches ALL positions — .back would exclude the
-            // external/Continuity cameras (position .unspecified) that the
-            // cloud preview and desktop webcams report.
-            position: .unspecified
-        )
-        guard let device = discovery.devices.first,
+        guard let device = Self.bestCamera(),
               let input = try? AVCaptureDeviceInput(device: device),
               session.canAddInput(input) else {
             Task { @MainActor in
@@ -493,7 +485,9 @@ final class MealPreviewView: UIView {
             return
         }
         session.beginConfiguration()
-        session.sessionPreset = .photo
+        if session.canSetSessionPreset(.photo) {
+            session.sessionPreset = .photo
+        }
         session.addInput(input)
         if session.canAddOutput(photoOutput) {
             session.addOutput(photoOutput)
@@ -502,9 +496,33 @@ final class MealPreviewView: UIView {
         session.startRunning()
     }
 
+    /// Back camera on a real iPhone; falls back to any camera (front, or the
+    /// external webcam the Rork preview injects) when there is no back one.
+    private nonisolated static func bestCamera() -> AVCaptureDevice? {
+        if let back = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) {
+            return back
+        }
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInWideAngleCamera, .external],
+            mediaType: .video,
+            position: .unspecified
+        )
+        return discovery.devices.first
+    }
+
     func capturePhoto() {
-        let settings = AVCapturePhotoSettings()
-        photoOutput.capturePhoto(with: settings, delegate: self)
+        sessionQueue.async {
+            // Capturing before the session is live throws an Objective-C
+            // exception (crash), so report a soft failure instead.
+            guard self.session.isRunning,
+                  let connection = self.photoOutput.connection(with: .video),
+                  connection.isEnabled, connection.isActive else {
+                Task { @MainActor in self.onPhoto?(nil) }
+                return
+            }
+            let settings = AVCapturePhotoSettings()
+            self.photoOutput.capturePhoto(with: settings, delegate: self)
+        }
     }
 
     func stopSession() {

@@ -175,15 +175,15 @@ struct IntakeView: View {
             }
         case 3:
             VStack(spacing: 16) {
-                HStack(spacing: 12) {
-                    ForEach([3, 4, 5, 6], id: \.self) { d in
+                HStack(spacing: 10) {
+                    ForEach([2, 3, 4, 5, 6], id: \.self) { d in
                         Button {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { daysPerWeek = d }
                         } label: {
                             Text("\(d)")
                                 .font(.title2.weight(.bold))
                                 .foregroundStyle(daysPerWeek == d ? TF.bg : TF.text)
-                                .frame(width: 64, height: 64)
+                                .frame(width: 56, height: 56)
                                 .background {
                                     if daysPerWeek == d {
                                         Circle().fill(TF.blue)
@@ -197,7 +197,7 @@ struct IntakeView: View {
                 Text("days per week")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
-                Text("We'll spread your program across these days so training fits your life, not the other way around.")
+                Text("We'll spread your program across the week. You can pick the exact days later in Profile.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

@@ -67,3 +67,38 @@ Left:
 
 Phase 1: functionality first (the "Left" list above, step by step).
 Phase 2: full redesign. Goal: stop looking like every other AI-generated app. Take inspiration from top fitness apps (bring 3 to 5 screenshots) and redesign screen by screen.
+
+## Oct 28 review: camera fix + full app sweep
+
+Fixed Oct 28 (needs a new TestFlight build to test):
+- [x] Meal scanner + barcode scanner camera was black (preview never connected), picked front camera, crashed on retake
+- [x] Notification prompt froze the launch splash; now asked once inside the app
+- [x] Barcode scanner had no Cancel button; double barcode reads
+- [x] Empty system tab bar under the custom one
+- [x] Camera permission text said barcodes only (App Review flag)
+- [x] Scans-left count from the server was always 3 (redeploy scan-meal function)
+- [x] Delete never showed on your own Community posts
+
+Must fix before App Store:
+- [x] Logged sets vanish after closing the app (exercise IDs regenerate each launch / on plan rebuild)
+- [x] "Full history" upgrade card shows to everyone, feature doesn't exist (rejection risk); "Programs are Premium" copy contradicts free plans
+- [x] Community: add Block user (Apple requirement)
+- [x] Profile: hide Developer "Reset onboarding" in release; Restore purchases for free users; Done button on Profile tab does nothing
+- [x] Check-in notification says "Mason reads every one" (not true today)
+- [x] One app name everywhere (FTM: Fitness & Nutrition vs FTMFitnessNutrition vs FTM Team vs TransFit); drop "Free at launch"
+- [ ] Confirm support@transfit.app actually receives mail (you)
+
+Notes on the Oct 28 fixes:
+- Full history is now real: Premium gets 7/30/90 day calorie bars with average kcal, protein and days logged
+- Developer "Reset onboarding" only shows in debug builds, so not on TestFlight
+- Training days: pick exact weekdays in Profile > Edit profile (2 to 6); onboarding now offers 2 days
+- Check-in photos stay on the phone only (copy says so); no coach dashboard yet
+- Still your call: Community header "This is where we shine, boys"
+
+Improvements:
+- [x] Home: remove duplicate Log food tile and profile icon; show "over by X" kcal
+- [x] Train: lbs/kg setting; show last session's weight x reps; rest timer; pick training weekdays incl. 2 days/week; "Train anyway" on rest days
+- [x] Nutrition: day switcher (log yesterday); meal "+" preselects that meal; tap to edit a logged item; undo delete; "Scan a meal" on the main screen; over-target state
+- [x] Community: Mason posts get real dates (guidelines were already collapsed)
+- [x] Profile: units + notifications toggle; confirm before "Rebuild my training plan"
+- [x] Check-in: front photo optional; say photos stay on this phone

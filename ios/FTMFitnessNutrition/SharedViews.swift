@@ -24,7 +24,7 @@ struct TFHealthDisclaimer: View {
                     .foregroundStyle(TF.text)
                 Text(compact
                      ? "General fitness and nutrition education only. Talk to your doctor before changing how you train or eat."
-                     : "FTMFitnessNutrition offers general fitness and nutrition education — it isn't medical advice, diagnosis, or treatment. Anything touching hormones, surgery recovery, diabetes, or PEDs is informational only. Always talk to your own healthcare provider before making a decision, and stop training if you feel unwell.")
+                     : "FTM: Fitness & Nutrition offers general fitness and nutrition education — it isn't medical advice, diagnosis, or treatment. Anything touching hormones, surgery recovery, diabetes, or PEDs is informational only. Always talk to your own healthcare provider before making a decision, and stop training if you feel unwell.")
                     .font(.caption2)
                     .foregroundStyle(TF.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

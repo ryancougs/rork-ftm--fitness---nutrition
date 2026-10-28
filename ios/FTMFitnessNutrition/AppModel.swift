@@ -65,8 +65,8 @@ final class AppModel {
     var foodLog: [String: [LoggedFood]] = [:]
     var exerciseLogs: [String: [UUID: ExerciseLog]] = [:]   // date → exerciseID → log
 
-    // Mutable in-memory copy of sample programs so we could later modify reps etc.
-    var programs: [WorkoutProgram] = SampleData.programs
+    // Ready-made plans with stable ids so logged sets survive relaunches.
+    var programs: [WorkoutProgram] = SampleData.programs.map { $0.stabilized(namespace: $0.name) }
 
     /// The user's personalized program, generated on-device by the plan engine.
     var personalProgram: WorkoutProgram? = nil
@@ -145,6 +145,108 @@ final class AppModel {
     }
     var selectedDayID: UUID? = nil
 
+    // MARK: Units & reminders (device settings)
+
+    enum WeightUnit: String, CaseIterable {
+        case lbs, kg
+        var label: String { rawValue }
+    }
+
+    /// Display unit for lifting weights. Sets are always stored in kg.
+    var weightUnit: WeightUnit = WeightUnit(rawValue: UserDefaults.standard.string(forKey: "tf.weightUnit") ?? "")
+        ?? (Locale.current.measurementSystem == .metric ? .kg : .lbs) {
+        didSet { UserDefaults.standard.set(weightUnit.rawValue, forKey: "tf.weightUnit") }
+    }
+
+    func displayWeight(fromKg kg: Double) -> Double {
+        weightUnit == .kg ? kg : kg * 2.20462
+    }
+
+    func kg(fromDisplay value: Double) -> Double {
+        weightUnit == .kg ? value : value / 2.20462
+    }
+
+    /// "60 kg" / "135 lbs" with no trailing .0
+    func weightLabel(fromKg kg: Double) -> String {
+        let v = (displayWeight(fromKg: kg) * 10).rounded() / 10
+        let text = v == v.rounded() ? String(Int(v)) : String(format: "%.1f", v)
+        return "\(text) \(weightUnit.label)"
+    }
+
+    /// Weekly Sunday check-in reminder on/off.
+    var checkInRemindersOn: Bool = UserDefaults.standard.object(forKey: "tf.checkInReminders") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(checkInRemindersOn, forKey: "tf.checkInReminders")
+            if checkInRemindersOn {
+                Task { await CheckInReminder.requestAndSchedule() }
+            } else {
+                CheckInReminder.cancel()
+            }
+        }
+    }
+
+    // MARK: Training weekdays & session override
+
+    /// Weekdays (1 = Sun ... 7 = Sat, Monday-first order) the user picked.
+    /// Ignored when it doesn't match daysPerWeek (falls back to defaults).
+    var customTrainingWeekdays: [Int] = UserDefaults.standard.array(forKey: "tf.trainingWeekdays") as? [Int] ?? [] {
+        didSet { UserDefaults.standard.set(customTrainingWeekdays, forKey: "tf.trainingWeekdays") }
+    }
+
+    var trainingWeekdays: [Int] {
+        if customTrainingWeekdays.count == profile.daysPerWeek { return customTrainingWeekdays }
+        return SampleData.preferredTrainingDays(weekly: profile.daysPerWeek)
+    }
+
+    /// Monday-first ordering for weekday numbers (1 = Sun ... 7 = Sat).
+    nonisolated static func mondayFirst(_ days: some Sequence<Int>) -> [Int] {
+        days.sorted { ($0 + 5) % 7 < ($1 + 5) % 7 }
+    }
+
+    /// Saves picked weekdays and keeps daysPerWeek (and the plan) in step.
+    func setTrainingWeekdays(_ days: Set<Int>) {
+        let ordered = Self.mondayFirst(days)
+        customTrainingWeekdays = ordered
+        if ordered.count != profile.daysPerWeek {
+            updateProfile { $0.daysPerWeek = ordered.count }
+        }
+    }
+
+    /// "yyyy-MM-dd|<day uuid>": a session the user chose for one specific day
+    /// (train on a rest day, or swap today's session).
+    private var sessionOverride: String? = UserDefaults.standard.string(forKey: "tf.sessionOverride") {
+        didSet { UserDefaults.standard.set(sessionOverride, forKey: "tf.sessionOverride") }
+    }
+
+    func chooseTodaySession(_ day: WorkoutDay?) {
+        sessionOverride = day.map { "\(todayKey)|\($0.id.uuidString)" }
+    }
+
+    /// True when today's session was picked by hand.
+    var hasTodayOverride: Bool { overriddenTodayDay != nil }
+
+    private var overriddenTodayDay: WorkoutDay? {
+        guard let sessionOverride else { return nil }
+        let parts = sessionOverride.split(separator: "|").map(String.init)
+        guard parts.count == 2, parts[0] == todayKey,
+              let id = UUID(uuidString: parts[1]) else { return nil }
+        return activeProgram?.days.first { $0.id == id }
+    }
+
+    /// Community users this person blocked (lowercased user ids). Their posts
+    /// are hidden everywhere in the feed. Device-local.
+    var blockedUserIDs: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "tf.blockedUserIDs") ?? []) {
+        didSet { UserDefaults.standard.set(Array(blockedUserIDs), forKey: "tf.blockedUserIDs") }
+    }
+
+    func block(userID: String) {
+        blockedUserIDs.insert(userID.lowercased())
+    }
+
+    func isBlocked(_ userID: String) -> Bool {
+        blockedUserIDs.contains(userID.lowercased())
+    }
+
     // Active main tab, so Home cards can deep-link into other tabs.
     var selectedTab: AppTab = .home
 
@@ -164,7 +266,8 @@ final class AppModel {
 
     /// Restore any persisted cloud session at launch, then sync state from the cloud.
     func handleAppLaunch() async {
-        await CheckInReminder.requestAndSchedule()
+        // Notification permission is requested from MainTabView once the user
+        // is signed in; asking here froze the launch splash behind the prompt.
         defer { isRestoringSession = false }
         guard await SupabaseService.shared.restoreSession() else { return }
         if let userID = SupabaseService.shared.currentUserID {
@@ -236,6 +339,9 @@ final class AppModel {
         checkIns.removeAll()
         personalProgram = nil
         chosenProgramName = nil
+        customTrainingWeekdays = []
+        sessionOverride = nil
+        blockedUserIDs = []
         hasCompletedOnboarding = false
         recentFoods.removeAll()
         favoriteFoods.removeAll()
@@ -358,7 +464,7 @@ final class AppModel {
 
     /// Rebuild the personalized training program from the current profile.
     func regeneratePlan() {
-        personalProgram = PlanEngine.generateProgram(for: profile)
+        personalProgram = PlanEngine.generateProgram(for: profile).stabilized(namespace: "custom")
     }
 
     /// Mason's read on the most recent check-in, if there is one.
@@ -370,10 +476,11 @@ final class AppModel {
     /// Today's session from the personalized plan, spread across the user's
     /// preferred training weekdays. Nil on rest days.
     var todayWorkout: WorkoutDay? {
+        if let picked = overriddenTodayDay { return picked }
         guard let program = activeProgram,
               !program.days.isEmpty else { return nil }
         let weekday = Calendar.current.component(.weekday, from: Date())
-        let trainingDays = SampleData.preferredTrainingDays(weekly: profile.daysPerWeek)
+        let trainingDays = trainingWeekdays
         guard let idx = trainingDays.firstIndex(of: weekday) else { return nil }
         return program.days[idx % program.days.count]
     }
@@ -383,6 +490,20 @@ final class AppModel {
     func log(forExercise id: UUID, on date: Date = Date()) -> ExerciseLog {
         let key = Self.dateKey(date)
         return exerciseLogs[key]?[id] ?? ExerciseLog(sets: [])
+    }
+
+    /// The most recent earlier day this exercise was logged, for the
+    /// "Last time" hint. Looks back up to 120 days.
+    func lastSession(forExercise id: UUID, before date: Date = Date()) -> (date: Date, sets: [LoggedSet])? {
+        let todayKey = Self.dateKey(date)
+        let keys = exerciseLogs.keys.filter { $0 < todayKey }.sorted(by: >)
+        for key in keys.prefix(120) {
+            if let sets = exerciseLogs[key]?[id]?.sets, !sets.isEmpty,
+               let day = SupabaseService.date(fromKey: key) {
+                return (day, sets)
+            }
+        }
+        return nil
     }
 
     func addSet(toExercise id: UUID, weight: Double, reps: Int, on date: Date = Date()) {
@@ -421,6 +542,26 @@ final class AppModel {
         list.append(LoggedFood(food: food, servings: servings, meal: meal, portionLabel: portionLabel))
         foodLog[key] = list
         recordRecent(food)
+        save()
+    }
+
+    /// Change the meal and/or amount of a logged item.
+    func updateFood(_ id: UUID, on date: Date, servings: Double, meal: MealType) {
+        let key = Self.dateKey(date)
+        guard var list = foodLog[key], let idx = list.firstIndex(where: { $0.id == id }) else { return }
+        list[idx].servings = servings
+        list[idx].meal = meal
+        foodLog[key] = list
+        save()
+    }
+
+    /// Puts a deleted item back (undo).
+    func restoreFood(_ item: LoggedFood, on date: Date) {
+        let key = Self.dateKey(date)
+        var list = foodLog[key] ?? []
+        guard !list.contains(where: { $0.id == item.id }) else { return }
+        list.append(item)
+        foodLog[key] = list
         save()
     }
 
@@ -521,10 +662,19 @@ final class AppModel {
 
     // MARK: - Helpers
 
-    static func dateKey(_ date: Date) -> String {
+    /// Shared formatter: building one per call was slow for the 90-day
+    /// history, and a fixed Gregorian/POSIX setup keeps keys stable for
+    /// people whose phone uses another calendar.
+    private static let dateKeyFormatter: DateFormatter = {
         let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy-MM-dd"
-        return f.string(from: date)
+        return f
+    }()
+
+    static func dateKey(_ date: Date) -> String {
+        dateKeyFormatter.string(from: date)
     }
 
     // MARK: - Persistence (simple JSON file in Documents)
@@ -591,7 +741,7 @@ final class AppModel {
         self.foodLog = p.foodLog
         self.exerciseLogs = p.exerciseLogs
         self.checkIns = p.checkIns
-        self.personalProgram = p.personalProgram
+        self.personalProgram = p.personalProgram?.stabilized(namespace: "custom")
         self.hasCompletedOnboarding = p.hasCompletedOnboarding
             || UserDefaults.standard.bool(forKey: "tf.hasCompletedOnboarding")
         self.recentFoods = p.recentFoods

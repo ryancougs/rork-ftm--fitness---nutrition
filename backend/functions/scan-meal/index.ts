@@ -96,6 +96,7 @@ Deno.serve(async (req) => {
   // with the lowercased user UUID, so that's the app_user_id here.
   const premium = await isPremium(user.id);
   let consumed = false;
+  let remainingAfter: number | null = null;
 
   if (!premium) {
     const { data: remaining, error } = await admin.rpc("consume_ai_scan_for", {
@@ -109,6 +110,7 @@ Deno.serve(async (req) => {
       return json(403, { error: "limit_reached" });
     }
     consumed = true;
+    remainingAfter = typeof remaining === "number" ? remaining : null;
   }
 
   // 4. Ask the AI proxy to read the plate.
@@ -132,10 +134,11 @@ Deno.serve(async (req) => {
     return json(422, { error: "no_food" });
   }
 
-  const { data: remaining } = await admin.rpc("remaining_ai_scans");
+  // remaining_ai_scans() reads auth.uid(), which is empty for the service
+  // role, so report the count returned by the consume call instead.
   return json(200, {
     foods,
-    remaining: premium ? null : (remaining ?? null),
+    remaining: premium ? null : remainingAfter,
   });
 });
 

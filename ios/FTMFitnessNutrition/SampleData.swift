@@ -293,6 +293,7 @@ enum SampleData {
     /// Simple mapping of how many days/week → which weekdays (1=Sun).
     static func preferredTrainingDays(weekly count: Int) -> [Int] {
         switch count {
+        case 2: return [2, 5]              // Mon, Thu
         case 3: return [2, 4, 6]           // Mon, Wed, Fri
         case 4: return [2, 3, 5, 6]        // Mon, Tue, Thu, Fri
         case 5: return [2, 3, 4, 5, 6]     // Mon-Fri
@@ -301,50 +302,59 @@ enum SampleData {
         }
     }
 
-    // MARK: - Coach updates (sample posts from Mason)
+    // MARK: - Coach updates (posts from Mason)
+
+    /// Real publish dates, so posts don't look freshly posted forever.
+    private static func postDate(_ key: String) -> Date {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = Calendar(identifier: .gregorian)
+        f.dateFormat = "yyyy-MM-dd"
+        return f.date(from: key) ?? Date()
+    }
 
     static let coachUpdates: [CoachUpdate] = [
         CoachUpdate(
-            title: "Welcome to FTMFitnessNutrition",
+            title: "Welcome to FTM: Fitness & Nutrition",
             body: "I built this space because I was tired of apps that don't get it. You shouldn't have to explain yourself before you start training. This is a place where you belong from day one. Whether you're pre-T, years on hormones, pre- or post-op, or anywhere in between — your training matters and your body deserves care. Let's get to work.",
             category: .ftmHealth,
-            date: Date().addingTimeInterval(-86400 * 2)
+            date: postDate("2026-10-26")
         ),
         CoachUpdate(
             title: "Off-Season Training: Building the X-Frame",
             body: "For trans masculine lifters, building an X-frame (wide shoulders, wide lats, developed upper chest) can help create a masculine silhouette regardless of where you are in your transition. Focus on overhead press, lateral raises, lat work, and upper chest. The V-taper comes from broad shoulders and a narrow waist — genetics play a role, but training shapes what you've got. Don't compare your chapter 1 to someone else's chapter 20.",
             category: .ftmHealth,
-            date: Date().addingTimeInterval(-86400 * 5)
+            date: postDate("2026-10-23")
         ),
         CoachUpdate(
             title: "Fueling for Muscle: Not All Calories Are Equal",
             body: "You can hit your calorie target with junk food and feel terrible, or hit it with whole foods and feel unstoppable. Protein from chicken, tofu, eggs, fish. Carbs from rice, oats, potatoes, fruit. Fats from olive oil, avocado, nuts, salmon. Whole foods give you micronutrients, fiber, and sustained energy that processed foods can't match. Hit your macros, yes — but the quality of those calories matters for how you feel and how you progress.",
             category: .nutrition,
-            date: Date().addingTimeInterval(-86400 * 7)
+            date: postDate("2026-10-21")
         ),
         CoachUpdate(
             title: "Programming for Testosterone Timelines",
             body: "If you're early on T, your recovery capacity is changing rapidly. You may be able to add volume faster than before, but your tendons and ligaments need time to catch up to your muscles. Start conservative, progress weekly, and listen to your body. If you're pre-T, you can still build significant strength and muscle — training hard and eating well will maximize whatever your hormone profile gives you. Consistency beats intensity every time.",
             category: .ftmHealth,
-            date: Date().addingTimeInterval(-86400 * 10)
+            date: postDate("2026-10-18")
         ),
         CoachUpdate(
             title: "Pre- and Post-Surgery Training Considerations",
             body: "Top surgery recovery is not the time to push. Follow your surgeon's protocol — typically 6+ weeks before upper body training resumes, and even then you start light. Pre-surgery, focus on building your back and chest foundation so you have something to rebuild from. Post-surgery, start with mobility, then light resistance, then full training. Patience here pays off for years. I've been through it — I know it's frustrating, but your body is healing.",
             category: .ftmHealth,
-            date: Date().addingTimeInterval(-86400 * 14)
+            date: postDate("2026-10-14")
         ),
         CoachUpdate(
             title: "Prep Week 4: Dialing In",
             body: "As we get deeper into prep, training volume stays high but intensity moderates. Sleep becomes non-negotiable. Stress management isn't optional. This is where the people who treat it as a lifestyle pull ahead of the people who treat it as a diet. You're not starving — you're sculpting. Mindset matters.",
             category: .prep,
-            date: Date().addingTimeInterval(-86400 * 18)
+            date: postDate("2026-10-10")
         ),
         CoachUpdate(
             title: "Supplements Mason Recommends",
             body: "Before anything else: food first. No supplement out-trains sleep, protein, or consistency. Inside the Prep Team I break down the short list I actually stand behind — how to read a label, what the research supports, and what to skip so you don't waste money. Always loop in your doctor before adding anything, especially if you're on hormone therapy.",
             category: .nutrition,
-            date: Date().addingTimeInterval(-86400 * 21),
+            date: postDate("2026-10-07"),
             isPremium: true
         ),
     ]

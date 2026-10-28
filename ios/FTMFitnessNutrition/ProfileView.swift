@@ -17,6 +17,8 @@ struct ProfileView: View {
     @State private var showingAbout = false
     @State private var showingDeleteConfirmation = false
     @State private var showingDeleteError = false
+    @State private var showingRebuildConfirmation = false
+    @State private var restoreMessage: String? = nil
     @State private var deletionErrorMessage = ""
     @State private var isRestoringPurchases = false
     @State private var showingPaywall = false
@@ -32,20 +34,15 @@ struct ProfileView: View {
                     targetsCard
                     settingsSection
                     subscriptionSection
+                    #if DEBUG
                     developerSection
+                    #endif
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 16)
             }
             .background(TF.bg.ignoresSafeArea())
             .navigationTitle("Profile")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                        .foregroundStyle(TF.blue)
-                        .fontWeight(.semibold)
-                }
-            }
             .sheet(isPresented: $showingEditProfile) {
                 EditProfileSheet()
                     .presentationDetents([.medium, .large])
@@ -284,18 +281,34 @@ struct ProfileView: View {
                         Spacer()
                     }
                     Divider()
-                    if store.isPremium {
+                    if !store.isPremium {
                         Button {
-                            isRestoringPurchases = true
-                            Task { @MainActor in
-                                await store.restore()
-                                isRestoringPurchases = false
-                            }
+                            showingPaywall = true
                         } label: {
-                            subscriptionRow("arrow.clockwise", "Restore purchases")
+                            subscriptionRow("star.fill", "Upgrade to Premium")
                         }
                         .buttonStyle(.plain)
-                        .disabled(isRestoringPurchases)
+                        Divider()
+                    }
+                    Button {
+                        isRestoringPurchases = true
+                        Task { @MainActor in
+                            let ok = await store.restore()
+                            isRestoringPurchases = false
+                            if !ok {
+                                restoreMessage = "Couldn't reach the App Store. Check your connection and try again."
+                            } else if store.isPremium {
+                                restoreMessage = "Premium is active on this account."
+                            } else {
+                                restoreMessage = "No previous purchases found for this Apple ID."
+                            }
+                        }
+                    } label: {
+                        subscriptionRow("arrow.clockwise", isRestoringPurchases ? "Restoring…" : "Restore purchases")
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isRestoringPurchases)
+                    if store.isPremium {
                         Divider()
                         Button {
                             openURL(URL(string: "itms-apps://apps.apple.com/account/subscriptions")!)
@@ -303,18 +316,19 @@ struct ProfileView: View {
                             subscriptionRow("gearshape.fill", "Manage subscription")
                         }
                         .buttonStyle(.plain)
-                    } else {
-                        Button {
-                            showingPaywall = true
-                        } label: {
-                            subscriptionRow("star.fill", "Upgrade to Premium")
-                        }
-                        .buttonStyle(.plain)
                     }
                 }
             }
             .sheet(isPresented: $showingPaywall) {
                 PaywallView()
+            }
+            .alert("Restore purchases", isPresented: Binding(
+                get: { restoreMessage != nil },
+                set: { if !$0 { restoreMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(restoreMessage ?? "")
             }
         }
     }
@@ -367,19 +381,35 @@ struct ProfileView: View {
                 .padding(.top, 8)
             TFCard(padding: 0) {
                 VStack(spacing: 0) {
+                    unitsRow
+                    Divider().padding(.leading, 48)
+                    remindersRow
+                    if !app.blockedUserIDs.isEmpty {
+                        Divider().padding(.leading, 48)
+                        settingsRow(icon: "hand.raised.fill", title: "Unblock everyone (\(app.blockedUserIDs.count))", color: TF.pink) {
+                            app.blockedUserIDs.removeAll()
+                        }
+                    }
+                    Divider().padding(.leading, 48)
                     settingsRow(icon: "shield.fill", title: "Privacy", color: TF.blue) {
                         showingPrivacy = true
                     }
                     Divider().padding(.leading, 48)
-                    settingsRow(icon: "info.circle.fill", title: "About FTMFitnessNutrition", color: TF.blue) {
+                    settingsRow(icon: "info.circle.fill", title: "About \(AppInfo.name)", color: TF.blue) {
                         showingAbout = true
                     }
                 }
             }
             TFButton(title: "Rebuild my training plan", systemImage: "arrow.triangle.2.circlepath", style: .secondary) {
-                app.regeneratePlan()
+                showingRebuildConfirmation = true
             }
             .padding(.top, 8)
+            .confirmationDialog("Rebuild your training plan?", isPresented: $showingRebuildConfirmation, titleVisibility: .visible) {
+                Button("Rebuild") { app.regeneratePlan(); app.save() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Your custom plan is rebuilt from your current profile. Sets you already logged stay saved.")
+            }
             TFButton(title: "Log out", systemImage: "arrow.right.square", style: .ghost) {
                 app.logOut()
             }
@@ -416,13 +446,60 @@ struct ProfileView: View {
             }
             TFHealthDisclaimer()
                 .padding(.top, 12)
-            Text("FTMFitnessNutrition — the only FTM fitness app you'll need.")
+            Text("\(AppInfo.name): the only FTM fitness app you'll need.")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 10)
         }
+    }
+
+    private var unitsRow: some View {
+        @Bindable var app = app
+        return HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(TF.blue.opacity(0.18))
+                    .frame(width: 30, height: 30)
+                Image(systemName: "scalemass.fill")
+                    .foregroundStyle(TF.blue)
+                    .font(.footnote)
+            }
+            Text("Lifting units")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(TF.text)
+            Spacer()
+            Picker("Lifting units", selection: $app.weightUnit) {
+                ForEach(AppModel.WeightUnit.allCases, id: \.self) { unit in
+                    Text(unit.label).tag(unit)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 110)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private var remindersRow: some View {
+        @Bindable var app = app
+        return HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(TF.pink.opacity(0.18))
+                    .frame(width: 30, height: 30)
+                Image(systemName: "bell.fill")
+                    .foregroundStyle(TF.pink)
+                    .font(.footnote)
+            }
+            Toggle("Sunday check-in reminder", isOn: $app.checkInRemindersOn)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(TF.text)
+                .tint(TF.blue)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     private func settingsRow(icon: String, title: String, color: Color, action: @escaping () -> Void) -> some View {
@@ -469,7 +546,7 @@ struct PrivacySheet: View {
                             Label("The short version", systemImage: "checkmark.seal.fill")
                                 .font(.headline.weight(.bold))
                                 .foregroundStyle(TF.blue)
-                            Text("Your account needs only a display name and an email. FTMFitnessNutrition never asks for your legal name, gender marker, or location. Your workout logs, food logs, and check-ins stay yours — no ads, no data selling, ever.")
+                            Text("Your account needs only a display name and an email. FTM: Fitness & Nutrition never asks for your legal name, gender marker, or location. Your workout logs, food logs, and check-ins stay yours — no ads, no data selling, ever.")
                                 .font(.subheadline)
                                 .foregroundStyle(TF.text)
                         }
@@ -557,15 +634,16 @@ struct AboutSheet: View {
                         .font(.system(size: 34, weight: .semibold))
                         .foregroundStyle(.white)
                 }
-                Text("FTMFitnessNutrition")
+                Text(AppInfo.name)
                     .font(.title.weight(.bold))
+                    .multilineTextAlignment(.center)
                     .foregroundStyle(TF.blue)
                 Text("The only FTM fitness app you'll need. A space where you don't have to explain yourself before you start training.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
-                Text("Version 1.0.0 — Free at launch")
+                Text("Version \(AppInfo.version)")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(TF.blue)
                 Text("Made for the trans masculine community, with input from a coach who lives it.")
@@ -603,6 +681,7 @@ struct EditProfileSheet: View {
     @State private var goal: FitnessGoal = .buildMuscle
     @State private var experience: ExperienceLevel = .beginner
     @State private var daysPerWeek: Int = 4
+    @State private var weekdays: Set<Int> = []
     @State private var lifestyle: Lifestyle = .mostlySitting
     @State private var equipment: EquipmentAccess = .fullGym
 
@@ -630,10 +709,10 @@ struct EditProfileSheet: View {
                             }
                         }
                     }
-                    section("Days per week") {
-                        HStack(spacing: 12) {
-                            ForEach([3, 4, 5, 6], id: \.self) { d in
-                                dayButton(d)
+                    section("Training days (\(weekdays.count) a week)") {
+                        HStack(spacing: 6) {
+                            ForEach(AppModel.mondayFirst(1...7), id: \.self) { wd in
+                                weekdayButton(wd)
                             }
                         }
                     }
@@ -662,11 +741,13 @@ struct EditProfileSheet: View {
                         }
                     }
                     TFButton(title: "Save changes", systemImage: "checkmark", style: .primary) {
+                        // Save the picked days first so the rebuilt plan lands on them.
+                        app.customTrainingWeekdays = AppModel.mondayFirst(weekdays)
                         app.updateProfile { p in
                             p.name = name.trimmingCharacters(in: .whitespaces)
                             p.goal = goal
                             p.experience = experience
-                            p.daysPerWeek = daysPerWeek
+                            p.daysPerWeek = weekdays.count
                             p.lifestyle = lifestyle
                             p.equipment = equipment
                             if let lbs = Double(bodyweightLbs), lbs > 0 { p.bodyweightKg = (lbs * 0.453592 * 10).rounded() / 10 }
@@ -716,6 +797,32 @@ struct EditProfileSheet: View {
             heightIn = ""
         }
         age = app.profile.age.map { String($0) } ?? ""
+        weekdays = Set(app.trainingWeekdays)
+    }
+
+    /// Pick 2 to 6 training weekdays; the count becomes days per week.
+    private func weekdayButton(_ wd: Int) -> some View {
+        let selected = weekdays.contains(wd)
+        let letter = String(Calendar.current.shortWeekdaySymbols[wd - 1].prefix(2))
+        return Button {
+            withAnimation(.spring(response: 0.3)) {
+                if selected {
+                    if weekdays.count > 2 { weekdays.remove(wd) }
+                } else if weekdays.count < 6 {
+                    weekdays.insert(wd)
+                }
+            }
+        } label: {
+            Text(letter)
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(selected ? TF.bg : TF.text)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(Circle().fill(selected ? TF.blue : TF.input))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Calendar.current.weekdaySymbols[wd - 1])
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 
     @ViewBuilder

@@ -37,6 +37,7 @@ nonisolated enum PlanEngine {
         // Base activity from training frequency, nudged by day-to-day lifestyle.
         let base: Double
         switch profile.daysPerWeek {
+        case 2: base = 1.40
         case 3: base = 1.45
         case 4: base = 1.50
         case 5: base = 1.55
@@ -466,6 +467,11 @@ nonisolated enum PlanEngine {
 
         let dayTemplates: [(String, String, (UserProfile) -> [Exercise])]
         switch profile.daysPerWeek {
+        case 2:
+            dayTemplates = [
+                ("Day 1 — Full Body A", "Squat / Press / Pull", fullBodyA),
+                ("Day 2 — Full Body B", "Hinge / Shoulders / Row", fullBodyB),
+            ]
         case 3:
             dayTemplates = [
                 ("Day 1 — Full Body A", "Squat / Press / Pull", fullBodyA),
@@ -513,7 +519,7 @@ nonisolated enum PlanEngine {
 
         let splitName: String
         switch profile.daysPerWeek {
-        case 3: splitName = "Full Body"
+        case 2, 3: splitName = "Full Body"
         case 4: splitName = "Upper / Lower"
         case 5: splitName = "Upper / Lower + X-Frame"
         default: splitName = "Push / Pull / Legs"

@@ -78,16 +78,14 @@ struct AuthView: View {
                 .scaledToFit()
                 .frame(width: 108, height: 108)
             VStack(spacing: 4) {
-                Text("FTM Team")
-                    .font(.largeTitle.weight(.bold))
+                Text(AppInfo.name)
+                    .font(.title.weight(.bold))
                     .foregroundStyle(TF.blue)
-                Text("A community based fitness app.")
+                    .multilineTextAlignment(.center)
+                Text("Training, nutrition and community, built for trans masculine lifters.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                Text("Free at launch")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(TF.blue)
             }
         }
         .padding(.top, 8)
