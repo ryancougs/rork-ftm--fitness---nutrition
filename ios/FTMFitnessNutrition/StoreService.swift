@@ -130,17 +130,29 @@ final class StoreService {
 
     // MARK: Purchase / restore
 
-    /// Starts a purchase. Returns true when the purchase completed (not cancelled).
-    @discardableResult
-    func purchase(_ package: Package) async -> Bool {
-        guard Purchases.isConfigured else { return false }
+    enum PurchaseOutcome {
+        case completed
+        case cancelled
+        case failed(String)
+    }
+
+    /// Starts a purchase. Failures come back with a readable message so the
+    /// paywall can show it (they used to fail silently, so a tap on
+    /// "Start free trial" looked like it did nothing).
+    func purchase(_ package: Package) async -> PurchaseOutcome {
+        guard Purchases.isConfigured else {
+            return .failed("The store isn't set up on this build yet.")
+        }
         do {
             let result = try await Purchases.shared.purchase(package: package)
             apply(result.customerInfo)
-            return !result.userCancelled
+            return result.userCancelled ? .cancelled : .completed
         } catch {
-            print("Purchase failed: \(error.localizedDescription)")
-            return false
+            if let code = error as? RevenueCat.ErrorCode, code == .purchaseCancelledError {
+                return .cancelled
+            }
+            print("Purchase failed: \(error)")
+            return .failed(error.localizedDescription)
         }
     }
 

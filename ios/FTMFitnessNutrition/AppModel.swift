@@ -546,11 +546,13 @@ final class AppModel {
     }
 
     /// Change the meal and/or amount of a logged item.
-    func updateFood(_ id: UUID, on date: Date, servings: Double, meal: MealType) {
+    func updateFood(_ id: UUID, on date: Date, servings: Double, meal: MealType,
+                    portionLabel: String? = nil) {
         let key = Self.dateKey(date)
         guard var list = foodLog[key], let idx = list.firstIndex(where: { $0.id == id }) else { return }
         list[idx].servings = servings
         list[idx].meal = meal
+        if let portionLabel { list[idx].portionLabel = portionLabel }
         foodLog[key] = list
         save()
     }

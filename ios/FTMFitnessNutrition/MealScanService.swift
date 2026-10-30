@@ -66,18 +66,26 @@ struct MealScanService {
         case notSignedIn
         case limitReached
         case badResponse
+        case noFood
+        case photoTooLarge
         case unavailable
         case tooManyRequests
+        case offline
         case serverError(Int)
 
+        /// Each message ends with a short code so testers can report exactly
+        /// which failure they hit ("scan said S503").
         var errorDescription: String? {
             switch self {
-            case .notSignedIn: "Sign in to use AI scanning."
+            case .notSignedIn: "Sign in to use AI scanning. (S401)"
             case .limitReached: "You've used all 3 free scans this week. Go Premium for unlimited scanning."
-            case .badResponse: "Couldn't read that photo. Try again with the whole plate in frame."
-            case .unavailable: "AI scanning is temporarily unavailable. Please try again later."
-            case .tooManyRequests: "You're scanning quickly — give it a moment and try again."
-            case .serverError: "Something went wrong on our end. Please try again."
+            case .badResponse: "Couldn't read the scan result. Please try again. (S200)"
+            case .noFood: "No food found in that photo. Try again with the whole plate in frame and good light. (S422)"
+            case .photoTooLarge: "That photo was too large to send. Please try again. (S400)"
+            case .unavailable: "AI scanning is temporarily unavailable. Please try again later. (S503)"
+            case .tooManyRequests: "You're scanning quickly. Give it a moment and try again. (S429)"
+            case .offline: "No connection. Check your internet and try again. (S0)"
+            case .serverError(let code): "Something went wrong on our end. Please try again. (S\(code))"
             }
         }
     }
@@ -116,7 +124,13 @@ struct MealScanService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = body
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            throw MealScanError.offline
+        }
         guard let http = response as? HTTPURLResponse else { throw MealScanError.unavailable }
         switch http.statusCode {
         case 200:
@@ -125,11 +139,15 @@ struct MealScanService {
                 throw MealScanError.badResponse
             }
             return foods
+        case 400, 413: throw MealScanError.photoTooLarge
         case 401: throw MealScanError.notSignedIn
         case 403: throw MealScanError.limitReached
+        case 422: throw MealScanError.noFood
         case 429: throw MealScanError.tooManyRequests
         case 503: throw MealScanError.unavailable
-        default: throw MealScanError.badResponse
+        default:
+            print("scan-meal returned \(http.statusCode): \(String(data: data, encoding: .utf8) ?? "")")
+            throw MealScanError.serverError(http.statusCode)
         }
     }
 

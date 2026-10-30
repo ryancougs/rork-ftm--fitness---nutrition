@@ -315,6 +315,13 @@ struct FoodItem: Identifiable, Codable, Equatable {
 
     var isPer100g: Bool { kcalPer100g != nil }
 
+    /// Grams that `calories`/`protein`/`carbs`/`fat` describe: the listed
+    /// serving when the source gives one, otherwise 100 g.
+    var baseGrams: Double {
+        if let servingGrams, servingGrams > 0 { return servingGrams }
+        return 100
+    }
+
     /// "Oikos — Oikos Greek" style display for branded products.
     var displayName: String {
         guard let brand, !brand.isEmpty else { return name }

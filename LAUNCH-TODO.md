@@ -102,3 +102,22 @@ Improvements:
 - [x] Community: Mason posts get real dates (guidelines were already collapsed)
 - [x] Profile: units + notifications toggle; confirm before "Rebuild my training plan"
 - [x] Check-in: front photo optional; say photos stay on this phone
+
+## Oct 30 fixes (needs a new TestFlight build to test)
+
+- [x] Bottom of every tab was hidden behind the tab bar; content now stops at the top of the bar
+- [x] Meal scan: photo was sent at 3x size (could hit the server size limit); now 1024 px
+- [x] Meal scan: opens straight from Nutrition instead of stacking on Add Food (sometimes didn't open)
+- [x] Meal scan: free users with 0 scans left see the upgrade card before taking a photo
+- [x] Meal scan errors now end with a code (S400, S422, S503...) so you can tell me which one you hit
+- [x] Barcode / packaged foods with a serving size logged the wrong calories (a 40 g bar logged at 40%)
+- [x] Editing a weighed food now updates its label ("300 g") to match the new amount
+- [x] Paywall: a failed purchase now shows the reason instead of doing nothing; "Try again" when plans don't load
+- [x] Profile: "Copy account ID" (for support and for granting testers Premium in RevenueCat)
+- [x] Profile: "Reset to recommended" no longer saves until you tap Save
+- [x] Body stats accept a decimal comma (72,5)
+- [x] Community: report/delete failures now show a message; display names get the same language filter
+
+Testing Premium without paying:
+- Fastest: RevenueCat > Customers > search your account ID (Profile > Copy account ID) > Grant promotional entitlement > premium. Works for scans too.
+- Or start the free trial in TestFlight. TestFlight purchases are sandbox and never charged, but only work once both products are attached to the `premium` entitlement and the default offering in RevenueCat.

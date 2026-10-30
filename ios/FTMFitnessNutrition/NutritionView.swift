@@ -14,6 +14,7 @@ struct NutritionView: View {
     @State private var addFoodRequest: AddFoodRequest? = nil
     @State private var editingItem: LoggedFood? = nil
     @State private var lastDeleted: LoggedFood? = nil
+    @State private var showingMealScanner = false
 
     /// What the Add Food sheet should open with.
     private struct AddFoodRequest: Identifiable {
@@ -62,8 +63,19 @@ struct NutritionView: View {
         }
         .sheet(item: $editingItem) { item in
             EditLoggedFoodSheet(item: item, date: selectedDate)
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+        }
+        // The scanner opens directly from this screen. It used to open the
+        // Add Food sheet first and then stack the scanner on top of it while
+        // that sheet was still animating in, which iOS sometimes refuses,
+        // leaving people on Add Food instead of the camera.
+        .sheet(isPresented: $showingMealScanner) {
+            MealScannerView { foods, meal in
+                for food in foods {
+                    app.addFood(food, servings: 1, meal: meal, on: selectedDate)
+                }
+            }
         }
         .overlay(alignment: .bottom) { undoBar }
     }
@@ -110,7 +122,7 @@ struct NutritionView: View {
 
     private var scanMealCard: some View {
         Button {
-            addFoodRequest = AddFoodRequest(scanner: true)
+            showingMealScanner = true
         } label: {
             HStack(spacing: 12) {
                 ZStack {
@@ -1284,9 +1296,14 @@ struct AddFoodSheet: View {
 
     private func addToLog(_ food: FoodItem) {
         if food.isPer100g, let grams = totalGrams {
+            // A logged item's calories are food.calories × servings, and
+            // food.calories describes one listed serving (servingGrams), or
+            // 100 g when there's no listed serving. Dividing by 100 for every
+            // food logged packaged items with a serving size (most barcode
+            // scans) at the wrong calories, e.g. a 40 g bar came out at 40%.
             app.addFood(
                 food,
-                servings: grams / 100,
+                servings: grams / food.baseGrams,
                 meal: meal,
                 portionLabel: portionLabel(for: food),
                 on: date
@@ -1484,6 +1501,13 @@ struct EditLoggedFoodSheet: View {
         isPortion ? item.servings * amount : amount
     }
 
+    /// Weighed entries keep a label that matches the new amount ("300 g"),
+    /// instead of still saying the original portion after scaling.
+    private var newPortionLabel: String? {
+        guard isPortion, amount != 1, item.food.isPer100g else { return nil }
+        return "\(Int((newServings * item.food.baseGrams).rounded())) g"
+    }
+
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 18) {
@@ -1523,7 +1547,8 @@ struct EditLoggedFoodSheet: View {
                 Spacer(minLength: 0)
 
                 TFButton(title: "Save", systemImage: "checkmark", style: .primary) {
-                    app.updateFood(item.id, on: date, servings: newServings, meal: meal)
+                    app.updateFood(item.id, on: date, servings: newServings, meal: meal,
+                                   portionLabel: newPortionLabel)
                     dismiss()
                 }
             }

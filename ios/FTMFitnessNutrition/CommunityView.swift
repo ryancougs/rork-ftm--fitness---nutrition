@@ -20,6 +20,7 @@ struct CommunityView: View {
     @State private var deletingPost: SupabaseService.CommunityPost? = nil
     @State private var blockingPost: SupabaseService.CommunityPost? = nil
     @State private var reportSubmitted = false
+    @State private var actionError: String? = nil
     @State private var coachCategory: CoachCategory? = nil
     @State private var showingCoachPaywall = false
 
@@ -111,6 +112,14 @@ struct CommunityView: View {
             } message: {
                 Text("You won't see their posts anymore. They aren't told you blocked them.")
             }
+            .alert("That didn't go through", isPresented: Binding(
+                get: { actionError != nil },
+                set: { if !$0 { actionError = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(actionError ?? "")
+            }
             .alert("Report submitted", isPresented: $reportSubmitted) {
                 Button("OK", role: .cancel) {}
             } message: {
@@ -148,6 +157,7 @@ struct CommunityView: View {
                 reportSubmitted = true
             } catch {
                 print("Report failed: \(error)")
+                actionError = "Couldn't send your report. Check your connection and try again."
             }
         }
     }
@@ -161,6 +171,7 @@ struct CommunityView: View {
                 posts.removeAll { $0.id == post.id }
             } catch {
                 print("Delete failed: \(error)")
+                actionError = "Couldn't delete your post. Check your connection and try again."
             }
         }
     }
@@ -506,7 +517,8 @@ struct ComposePostSheet: View {
     }
 
     private var canPost: Bool {
-        !trimmedText.isEmpty && trimmedText.count <= maxLength && !displayName.isEmpty
+        !trimmedText.isEmpty && trimmedText.count <= maxLength
+            && !displayName.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     var body: some View {
@@ -589,7 +601,8 @@ struct ComposePostSheet: View {
         let name = displayName.trimmingCharacters(in: .whitespaces)
 
         // Baseline content filter — keeps the feed kind between moderator passes.
-        let lowered = text.lowercased()
+        // The display name shows on every post, so it gets the same check.
+        let lowered = (text + " " + name).lowercased()
         if Self.blockedTerms.contains(where: { lowered.contains($0) }) {
             error = "Please rephrase — this space stays supportive, and that language doesn't fit it. Reach support@transfit.app if you think this is a mistake."
             return

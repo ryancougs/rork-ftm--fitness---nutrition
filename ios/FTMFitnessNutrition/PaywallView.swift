@@ -367,14 +367,19 @@ struct PaywallContentView: View {
         isPurchasing = true
         Task { @MainActor in
             defer { isPurchasing = false }
-            let completed = await store.purchase(package)
-            if completed {
+            switch await store.purchase(package) {
+            case .completed:
                 if store.isPremium {
                     onPurchased()
                 } else {
-                    errorMessage = "The purchase went through but your plan hasn't activated yet. Try \"Restore purchases\" — if it still doesn't show, contact support."
+                    errorMessage = "The purchase went through but your plan hasn't activated yet. Try \"Restore purchases\". If it still doesn't show, contact support."
                     showError = true
                 }
+            case .cancelled:
+                break
+            case .failed(let message):
+                errorMessage = "The App Store couldn't start the purchase. \(message)"
+                showError = true
             }
         }
     }
@@ -426,12 +431,24 @@ struct PaywallContentView: View {
 
     private var loadingState: some View {
         VStack(spacing: 10) {
-            ProgressView()
-                .tint(TF.blue)
-            Text(store.isLoadingOffering ? "Loading plans…" : "Plans aren't available right now. Reopen this page in a moment.")
+            if store.isLoadingOffering {
+                ProgressView()
+                    .tint(TF.blue)
+            }
+            Text(store.isLoadingOffering ? "Loading plans…" : "Plans aren't available right now.")
                 .font(.footnote)
                 .foregroundStyle(TF.textSecondary)
                 .multilineTextAlignment(.center)
+            if !store.isLoadingOffering {
+                Button {
+                    Task { await store.loadOffering() }
+                } label: {
+                    Label("Try again", systemImage: "arrow.clockwise")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(TF.blue)
+                }
+                .buttonStyle(.plain)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)

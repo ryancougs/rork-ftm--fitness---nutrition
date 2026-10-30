@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 /// Profile tab: user goal, stats, editable targets, settings.
 struct ProfileView: View {
@@ -22,6 +23,7 @@ struct ProfileView: View {
     @State private var deletionErrorMessage = ""
     @State private var isRestoringPurchases = false
     @State private var showingPaywall = false
+    @State private var copiedAccountID = false
 
     var body: some View {
         @Bindable var app = app
@@ -314,6 +316,20 @@ struct ProfileView: View {
                             openURL(URL(string: "itms-apps://apps.apple.com/account/subscriptions")!)
                         } label: {
                             subscriptionRow("gearshape.fill", "Manage subscription")
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if let accountID = SupabaseService.shared.currentUserID?.lowercased() {
+                        Divider()
+                        // Support uses this ID to look up a subscription, or to
+                        // grant Premium to testers from the RevenueCat dashboard.
+                        Button {
+                            UIPasteboard.general.string = accountID
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                            withAnimation { copiedAccountID = true }
+                        } label: {
+                            subscriptionRow(copiedAccountID ? "checkmark" : "doc.on.doc",
+                                            copiedAccountID ? "Account ID copied" : "Copy account ID")
                         }
                         .buttonStyle(.plain)
                     }
@@ -743,6 +759,9 @@ struct EditProfileSheet: View {
                     TFButton(title: "Save changes", systemImage: "checkmark", style: .primary) {
                         // Save the picked days first so the rebuilt plan lands on them.
                         app.customTrainingWeekdays = AppModel.mondayFirst(weekdays)
+                        let lbsText = Self.number(bodyweightLbs)
+                        let ftText = Self.number(heightFt)
+                        let inText = Self.number(heightIn)
                         app.updateProfile { p in
                             p.name = name.trimmingCharacters(in: .whitespaces)
                             p.goal = goal
@@ -750,9 +769,9 @@ struct EditProfileSheet: View {
                             p.daysPerWeek = weekdays.count
                             p.lifestyle = lifestyle
                             p.equipment = equipment
-                            if let lbs = Double(bodyweightLbs), lbs > 0 { p.bodyweightKg = (lbs * 0.453592 * 10).rounded() / 10 }
-                            let ft = Double(heightFt) ?? 0
-                            let inches = Double(heightIn) ?? 0
+                            if let lbs = Double(lbsText), lbs > 0 { p.bodyweightKg = (lbs * 0.453592 * 10).rounded() / 10 }
+                            let ft = Double(ftText) ?? 0
+                            let inches = Double(inText) ?? 0
                             if ft > 0 { p.heightCm = ((ft * 30.48 + inches * 2.54) * 10).rounded() / 10 }
                             if let a = Int(age), a > 0 { p.age = a }
                         }
@@ -776,6 +795,11 @@ struct EditProfileSheet: View {
             }
         }
         .onAppear { syncFromProfile() }
+    }
+
+    /// Accepts "72,5" as well as "72.5" (French and other comma keyboards).
+    private static func number(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
     }
 
     private func syncFromProfile() {
@@ -898,10 +922,14 @@ struct EditTargetsSheet: View {
                     numberField("Carbs (g)", text: $carbs)
                     numberField("Fat (g)", text: $fat)
                     Button {
-                        app.updateProfile { p in
-                            p.applyDefaultTargets()
-                        }
-                        syncFromProfile()
+                        // Fill in the recommended numbers; nothing is saved
+                        // until "Save targets", so Cancel still backs out.
+                        var recommended = app.profile
+                        recommended.applyDefaultTargets()
+                        calories = String(recommended.targetCalories)
+                        protein = String(recommended.targetProtein)
+                        carbs = String(recommended.targetCarbs)
+                        fat = String(recommended.targetFat)
                     } label: {
                         Label("Reset to recommended", systemImage: "arrow.counterclockwise")
                             .font(.subheadline.weight(.semibold))

@@ -16,17 +16,24 @@ struct MainTabView: View {
 
     var body: some View {
         @Bindable var app = app
-        TabView(selection: $app.selectedTab) {
-            // The custom bar below replaces the system one; hide the system
-            // bar so an empty strip doesn't sit under it on device.
-            HomeView().tag(AppTab.home).toolbar(.hidden, for: .tabBar)
-            TrainView().tag(AppTab.train).toolbar(.hidden, for: .tabBar)
-            NutritionView().tag(AppTab.eat).toolbar(.hidden, for: .tabBar)
-            CommunityView().tag(AppTab.community).toolbar(.hidden, for: .tabBar)
-            ProfileView().tag(AppTab.profile).toolbar(.hidden, for: .tabBar)
+        // The tab content and the custom bar are stacked, not overlaid: a
+        // safeAreaInset on the TabView doesn't reach the scroll views inside
+        // each tab's NavigationStack, so the last card on every screen used
+        // to scroll in behind the bar. Stacking gives each tab a frame that
+        // ends exactly at the top of the bar.
+        VStack(spacing: 0) {
+            TabView(selection: $app.selectedTab) {
+                // The custom bar below replaces the system one; hide the system
+                // bar so an empty strip doesn't sit under it on device.
+                HomeView().tag(AppTab.home).toolbar(.hidden, for: .tabBar)
+                TrainView().tag(AppTab.train).toolbar(.hidden, for: .tabBar)
+                NutritionView().tag(AppTab.eat).toolbar(.hidden, for: .tabBar)
+                CommunityView().tag(AppTab.community).toolbar(.hidden, for: .tabBar)
+                ProfileView().tag(AppTab.profile).toolbar(.hidden, for: .tabBar)
+            }
+            tabBar
         }
         .background(TF.bg.ignoresSafeArea())
-        .safeAreaInset(edge: .bottom, spacing: 0) { tabBar }
         .tint(TF.blue)
         // Dismissible soft offer right after onboarding completes — shown at
         // most once per session (the store caps unprompted paywalls).
@@ -93,5 +100,7 @@ struct MainTabView: View {
 }
 
 #Preview {
-    MainTabView().environment(AppModel())
+    MainTabView()
+        .environment(AppModel())
+        .environment(StoreService.shared)
 }

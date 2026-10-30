@@ -15,6 +15,7 @@ struct MealScannerView: View {
     var onLog: ([FoodItem], MealType) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(StoreService.self) private var store
 
     private enum Phase {
         case checkingPermission
@@ -356,6 +357,12 @@ struct MealScannerView: View {
     // MARK: Flow
 
     private func checkPermission() async {
+        // Free users with no scans left see the upgrade card right away
+        // instead of after taking a photo.
+        if !store.isPremium, await MealScanService.shared.remainingScans() == 0 {
+            phase = .limitReached
+            return
+        }
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             phase = .camera
@@ -552,7 +559,12 @@ private extension UIImage {
         guard maxSide > maxDimension, maxSide > 0 else { return self }
         let scale = maxDimension / maxSide
         let newSize = CGSize(width: size.width * scale, height: size.height * scale)
-        let renderer = UIGraphicsImageRenderer(size: newSize)
+        // Render at 1x. The default format uses the screen scale (3x on most
+        // iPhones), which turned the 1024 px target into a ~3000 px image and
+        // pushed some uploads past the scan server's size limit.
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: newSize, format: format)
         return renderer.image { _ in
             draw(in: CGRect(origin: .zero, size: newSize))
         }

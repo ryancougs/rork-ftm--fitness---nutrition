@@ -307,12 +307,12 @@ struct IntakeView: View {
     // MARK: Body stats (entered in US units, stored as kg/cm for BMR math)
 
     private var bodyweightKgValue: Double? {
-        let bw = (Double(bodyweightLbs) ?? 0) * 0.453592
+        let bw = (Double(bodyweightLbs.replacingOccurrences(of: ",", with: ".")) ?? 0) * 0.453592
         return bw > 0 ? (bw * 10).rounded() / 10 : nil
     }
 
     private var heightCmValue: Double? {
-        let h = (Double(heightFt) ?? 0) * 30.48 + (Double(heightIn) ?? 0) * 2.54
+        let h = (Double(heightFt.replacingOccurrences(of: ",", with: ".")) ?? 0) * 30.48 + (Double(heightIn.replacingOccurrences(of: ",", with: ".")) ?? 0) * 2.54
         return h > 0 ? (h * 10).rounded() / 10 : nil
     }
 
