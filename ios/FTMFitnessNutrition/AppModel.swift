@@ -305,6 +305,12 @@ final class AppModel {
             hasCompletedOnboarding = false
             recentFoods.removeAll()
             favoriteFoods.removeAll()
+            // Per-person settings too, so the new account doesn't inherit the
+            // last person's program pick, weekdays or block list.
+            chosenProgramName = nil
+            customTrainingWeekdays = []
+            sessionOverride = nil
+            blockedUserIDs = []
         }
         profile.email = result.email ?? email
         if let userID = SupabaseService.shared.currentUserID {

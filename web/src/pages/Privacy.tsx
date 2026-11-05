@@ -1,20 +1,23 @@
 import LegalLayout from "@/components/LegalLayout";
 
 const SUPPORT_EMAIL = "support@transfit.app";
+const APP_NAME = "FTM: Fitness & Nutrition";
 
 export default function Privacy() {
   return (
     <LegalLayout
       title="Privacy Policy"
-      updated="19 August 2026"
-      intro="TransFit is built for the trans masculine community, and we know privacy is not a formality here — it can be a safety issue. This policy explains exactly what we store, why, and how you can delete it. We do not sell your data, ever, to anyone."
+      updated="5 November 2026"
+      intro={`${APP_NAME} ("FTM") is built for the trans masculine community, and we know privacy is not a formality here. It can be a safety issue. This policy explains exactly what we store, where it goes, and how you can delete it. We do not sell your data, ever, to anyone.`}
     >
       <h2>The short version</h2>
       <ul>
-        <li>We store your account email and the fitness data you choose to enter.</li>
+        <li>We store your account email, your profile, and your weekly check-ins on our servers.</li>
+        <li>Your food logs, workout logs, and progress photos stay on your phone.</li>
+        <li>If you use AI meal scanning, the meal photo is sent to an AI provider to estimate calories. We don't save it.</li>
         <li>We never sell or rent your personal data, and we do not run third-party ad tracking.</li>
         <li>We do not require your legal name, gender marker, or any medical documentation.</li>
-        <li>Community posts you write are visible to other users — under a display name you choose. Your email is never shown.</li>
+        <li>Community posts are visible to other signed-in users under a display name you choose. Your email is never shown.</li>
         <li>You can delete your account and all associated data from inside the app at any time.</li>
       </ul>
 
@@ -24,20 +27,15 @@ export default function Privacy() {
       <p>
         When you create an account we store your <strong>email address</strong> and a securely hashed
         password. We never store your password in readable form. Your display name is whatever you
-        choose to enter — it does not need to match any legal document.
+        choose to enter. It does not need to match any legal document.
       </p>
 
-      <h3>Fitness and wellbeing information</h3>
-      <p>
-        TransFit stores the information you enter so it can sync across your devices and show your
-        history. This includes:
-      </p>
+      <h3>Stored on our servers</h3>
       <ul>
-        <li>Training goal, experience level, weekly availability, lifestyle, and equipment access from onboarding</li>
-        <li>Optional body stats such as height, weight, and age</li>
-        <li>Workout logs — exercises, sets, reps, and weights</li>
-        <li>Food logs and nutrition targets</li>
-        <li>Weekly check-ins — energy, sleep, stress, hunger ratings, workout adherence, and any notes you write</li>
+        <li>Your profile: name you entered, training goal, experience level, weekly availability, lifestyle, and equipment access</li>
+        <li>Optional body stats such as height, weight, and age, plus your calorie and macro targets</li>
+        <li>Weekly check-ins: energy, sleep, stress, and hunger ratings, workout adherence, and any notes you write</li>
+        <li>Your AI scan count for the current week (a number, not the photos)</li>
       </ul>
       <p>
         Some of this may be considered health-related information. We treat it accordingly: it is
@@ -45,57 +43,80 @@ export default function Privacy() {
         for advertising.
       </p>
 
+      <h3>Stored only on your phone</h3>
+      <p>
+        Food logs, workout logs (exercises, sets, reps, and weights), favorite and recent foods, and
+        check-in progress photos are saved on your device only. We cannot see them, and they are
+        removed if you delete the app or your account. If we add cloud sync for these later, we will
+        update this policy first.
+      </p>
+
       <h3>Community content</h3>
       <p>
         If you post in the community feed, we store the display name you typed for that post and the
-        post text itself, and both are visible to other signed-in users. Your email address is
+        post text itself, and both are visible to other signed-in users. Your email address is{" "}
         <strong>never</strong> attached to a post. When you report a post, we store the report and
         the reason you selected so a moderator can review it; the person you reported is not told
-        who reported them. Deleting your account deletes your posts as well.
+        who reported them. If you block someone, that list stays on your phone. Deleting your
+        account deletes your posts as well.
       </p>
 
       <h3>What we do not collect</h3>
       <ul>
         <li>We do not collect your legal name, gender marker, or transition documentation.</li>
         <li>We do not collect your precise location.</li>
-        <li>We do not access your device contacts, photos, or health app data unless you explicitly grant it for a specific feature.</li>
+        <li>We do not access your contacts or health app data.</li>
+        <li>We only access the camera or a photo when you choose to scan a meal, scan a barcode, or add a check-in photo.</li>
         <li>We do not use third-party advertising or cross-app tracking SDKs.</li>
       </ul>
 
-      <h2>How we use your information</h2>
-      <ul>
-        <li>To provide the core app: saving your logs, check-ins, and programs and syncing them to your devices.</li>
-        <li>To generate personalized training and nutrition suggestions on your device.</li>
-        <li>To keep the community feed safe: reviewing reported posts and enforcing the community guidelines.</li>
-        <li>To respond to you when you contact support.</li>
-        <li>To diagnose crashes and fix bugs using aggregated, non-identifying diagnostics.</li>
-      </ul>
+      <h2>AI meal scanning</h2>
       <p>
-        We do not use your data to train public AI models, and we do not share your check-in notes
-        with other users.
+        Meal scanning is optional, and the app asks for your permission before your first scan. When
+        you scan a meal, the photo is sent to our server and then to an AI model from{" "}
+        <strong>OpenAI</strong> (through our AI service provider, Rork) to estimate the foods,
+        calories, and macros on the plate. The photo is used only to produce that estimate. We do not
+        save it or attach it to your account, and our providers do not use it to train AI models.
+        OpenAI may keep API requests for a limited time for abuse monitoring under its own policies. Only the photo is sent: no
+        name, email, or other profile details go with it. AI estimates can be wrong, so please check
+        them before logging.
       </p>
 
       <h2>Plan generation happens on your device</h2>
       <p>
-        Your training and nutrition plans are built by rules running entirely inside the app — on
-        your phone. Nothing about you is sent to an AI provider to build a plan, and the generator
-        works offline. If we ever add cloud-based AI features, we will update this policy before
-        they launch.
+        Your training and nutrition plans are built by rules running inside the app on your phone.
+        Nothing about you is sent to an AI provider to build a plan.
+      </p>
+
+      <h2>How we use your information</h2>
+      <ul>
+        <li>To provide the core app: your profile, targets, check-ins, and programs.</li>
+        <li>To estimate the nutrition in meal photos you choose to scan.</li>
+        <li>To manage your subscription and the free weekly scan allowance.</li>
+        <li>To keep the community feed safe: reviewing reported posts and enforcing the community guidelines.</li>
+        <li>To respond to you when you contact support.</li>
+      </ul>
+      <p>
+        We do not use your data to train AI models, and we do not share your check-in notes with
+        other users.
       </p>
 
       <h2>Service providers</h2>
-      <p>We use a small number of vetted providers to run the service:</p>
+      <p>We use a small number of providers to run the service:</p>
       <ul>
-        <li><strong>Supabase</strong> — database hosting, authentication, and community feed storage.</li>
-        <li><strong>Apple</strong> — app distribution and, if you subscribe, payment processing. Apple handles all payment details; we never see your card information.</li>
+        <li><strong>Supabase</strong>: database hosting, authentication, and community feed storage.</li>
+        <li><strong>Rork and OpenAI</strong>: AI meal scan estimates (meal photo only, not saved by us).</li>
+        <li><strong>RevenueCat</strong>: subscription status. It receives an anonymous account ID and your purchase history from Apple, not your email.</li>
+        <li><strong>Apple</strong>: app distribution and payment processing. Apple handles all payment details; we never see your card information.</li>
+        <li><strong>Open Food Facts and USDA FoodData Central</strong>: food search and barcode lookups. They receive the search text or barcode, not your identity.</li>
       </ul>
 
       <h2>Data retention and deletion</h2>
       <p>
         We keep your data for as long as your account exists. You can delete your account at any time
-        from <strong>Profile → Delete account</strong> inside the app. Deleting your account removes
-        your profile, logs, check-ins, notes, and community posts from our production database.
-        Encrypted backups roll off within 30 days.
+        from <strong>Profile, then Delete account</strong> inside the app. Deleting your account
+        removes your profile, check-ins, notes, scan count, and community posts from our production
+        database, and clears the data stored on your phone. Encrypted backups roll off within 30 days.
       </p>
       <p>
         You may also email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> to request access
@@ -104,10 +125,10 @@ export default function Privacy() {
 
       <h2>Your rights</h2>
       <p>
-        Depending on where you live — including under the UK GDPR, EU GDPR, and CCPA — you may have
-        the right to access, correct, export, delete, or restrict processing of your personal data,
-        and to object to certain processing. TransFit does not sell personal information as defined
-        under the CCPA. To exercise any of these rights, email{" "}
+        Depending on where you live, including under the UK GDPR, EU GDPR, Quebec Law 25, PIPEDA, and
+        the CCPA, you may have the right to access, correct, export, delete, or restrict processing
+        of your personal data, and to object to certain processing. We do not sell personal
+        information as defined under the CCPA. To exercise any of these rights, email{" "}
         <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
       </p>
 
@@ -120,7 +141,7 @@ export default function Privacy() {
 
       <h2>Children</h2>
       <p>
-        TransFit is not directed at children under 13, and we do not knowingly collect data from
+        {APP_NAME} is not directed at children under 13, and we do not knowingly collect data from
         them. If you believe a child has given us personal data, contact us and we will delete it.
       </p>
 

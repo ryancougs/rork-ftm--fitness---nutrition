@@ -33,7 +33,7 @@ export default function Index() {
             <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary text-primary-foreground">
               <Leaf className="h-4 w-4" />
             </span>
-            TransFit
+            FTM
           </span>
           <nav className="flex gap-5 text-sm font-medium text-muted-foreground">
             <Link to="/support" className="transition-colors hover:text-primary">
@@ -91,7 +91,7 @@ export default function Index() {
           </div>
 
           <p className="mt-10 rounded-2xl border border-border bg-secondary/50 p-6 text-sm leading-relaxed text-muted-foreground">
-            <strong className="font-semibold text-foreground">A note on health:</strong> TransFit
+            <strong className="font-semibold text-foreground">A note on health:</strong> FTM
             provides general fitness and nutrition education. It is not medical advice. Content
             relating to hormones, surgery recovery, or performance-enhancing drugs is informational
             only — always speak with your own healthcare provider.
@@ -101,7 +101,7 @@ export default function Index() {
 
       <footer className="border-t border-border/60 py-10">
         <div className="mx-auto flex max-w-5xl flex-col gap-3 px-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <span>© {new Date().getFullYear()} TransFit</span>
+          <span>© {new Date().getFullYear()} FTM</span>
           <nav className="flex gap-5">
             <Link to="/privacy" className="transition-colors hover:text-primary">
               Privacy

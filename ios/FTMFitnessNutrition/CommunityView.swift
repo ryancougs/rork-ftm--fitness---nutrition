@@ -512,6 +512,20 @@ struct ComposePostSheet: View {
         "retard", "faggot", "tranny", "fagg", "nigger", "kike",
     ]
 
+    /// Names that would pass as the coach or the app team. Mirrors the
+    /// server-side check in the community_posts insert policy.
+    private static let reservedNameParts: [String] = [
+        "mason", "coach", "admin", "moderator", "ftmteam", "ftmfitness",
+        "support", "official", "transfit",
+    ]
+
+    private static func isReservedName(_ name: String) -> Bool {
+        let lettersOnly = name.lowercased().filter { $0.isLetter && $0.isASCII }
+        return reservedNameParts.contains { lettersOnly.contains($0) }
+    }
+
+    private let maxNameLength = 40
+
     private var trimmedText: String {
         postText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -519,6 +533,7 @@ struct ComposePostSheet: View {
     private var canPost: Bool {
         !trimmedText.isEmpty && trimmedText.count <= maxLength
             && !displayName.trimmingCharacters(in: .whitespaces).isEmpty
+            && displayName.trimmingCharacters(in: .whitespaces).count <= maxNameLength
     }
 
     var body: some View {
@@ -535,6 +550,11 @@ struct ComposePostSheet: View {
                                 .foregroundStyle(TF.text)
                                 .submitLabel(.done)
                                 .onSubmit { dismissKeyboard() }
+                                .onChange(of: displayName) { _, newValue in
+                                    if newValue.count > maxNameLength {
+                                        displayName = String(newValue.prefix(maxNameLength))
+                                    }
+                                }
                                 .padding(10)
                                 .background(RoundedRectangle(cornerRadius: TF.cornerS).fill(TF.input))
                             Text("Your email is never shown. You can use any name you like.")
@@ -605,6 +625,10 @@ struct ComposePostSheet: View {
         let lowered = (text + " " + name).lowercased()
         if Self.blockedTerms.contains(where: { lowered.contains($0) }) {
             error = "Please rephrase — this space stays supportive, and that language doesn't fit it. Reach support@transfit.app if you think this is a mistake."
+            return
+        }
+        if Self.isReservedName(name) {
+            error = "That display name is reserved for the FTM team. Pick another name."
             return
         }
 

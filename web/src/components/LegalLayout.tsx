@@ -19,7 +19,7 @@ export default function LegalLayout({ title, updated, intro, children }: LegalLa
             <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary text-primary-foreground">
               <Leaf className="h-4 w-4" />
             </span>
-            TransFit
+            FTM
           </Link>
           <Link
             to="/"
@@ -33,7 +33,7 @@ export default function LegalLayout({ title, updated, intro, children }: LegalLa
 
       <main className="mx-auto max-w-3xl px-6 py-14">
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-accent-foreground/70">
-          TransFit
+          FTM
         </p>
         <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">{title}</h1>
         <p className="mt-3 text-sm text-muted-foreground">Last updated: {updated}</p>
@@ -47,7 +47,7 @@ export default function LegalLayout({ title, updated, intro, children }: LegalLa
 
       <footer className="border-t border-border/60 py-10">
         <div className="mx-auto flex max-w-3xl flex-col gap-3 px-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <span>© {new Date().getFullYear()} TransFit</span>
+          <span>© {new Date().getFullYear()} FTM</span>
           <nav className="flex gap-5">
             <Link to="/privacy" className="transition-colors hover:text-primary">
               Privacy

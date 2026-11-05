@@ -19,6 +19,7 @@ struct MealScannerView: View {
 
     private enum Phase {
         case checkingPermission
+        case consent
         case camera
         case denied
         case unavailable
@@ -31,12 +32,16 @@ struct MealScannerView: View {
     @State private var phase: Phase = .checkingPermission
     @State private var meal: MealType = .lunch
     @State private var captureTrigger: Int = 0
+    /// Apple guideline 5.1.2(i): people must agree before personal data
+    /// (the meal photo) goes to a third-party AI. Asked once per device.
+    @AppStorage("tf.aiScanConsent") private var hasAIConsent: Bool = false
 
     var body: some View {
         NavigationStack {
             Group {
                 switch phase {
                 case .checkingPermission: checkingView
+                case .consent: consentView
                 case .camera: cameraView
                 case .denied: deniedView
                 case .unavailable: unavailableView
@@ -154,6 +159,25 @@ struct MealScannerView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(TF.blue)
+        }
+    }
+
+    private var consentView: some View {
+        stateView(
+            icon: "sparkles",
+            title: "How AI scanning works",
+            message: "Your meal photo is sent to our server and analyzed by an AI model from OpenAI to estimate calories and macros. The photo is used only for this estimate. It isn't saved to your account or used to train AI models. Estimates can be off, so check them before logging."
+        ) {
+            VStack(spacing: 10) {
+                TFButton(title: "Agree and scan", systemImage: "camera.fill", style: .primary) {
+                    hasAIConsent = true
+                    phase = .checkingPermission
+                    Task { await checkPermission() }
+                }
+                TFButton(title: "Not now", systemImage: nil, style: .ghost) {
+                    dismiss()
+                }
+            }
         }
     }
 
@@ -361,6 +385,10 @@ struct MealScannerView: View {
         // instead of after taking a photo.
         if !store.isPremium, await MealScanService.shared.remainingScans() == 0 {
             phase = .limitReached
+            return
+        }
+        guard hasAIConsent else {
+            phase = .consent
             return
         }
         switch AVCaptureDevice.authorizationStatus(for: .video) {

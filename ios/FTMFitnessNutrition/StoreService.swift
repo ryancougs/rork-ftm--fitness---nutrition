@@ -186,8 +186,12 @@ final class StoreService {
     /// Links the RevenueCat customer to the signed-in Supabase user's id
     /// (lowercased UUID). The server-side scanner looks up Premium by this id.
     func identify(userID: String) {
-        guard Purchases.isConfigured, Purchases.shared.isAnonymous else { return }
+        // Compare ids instead of checking isAnonymous: when someone logs out
+        // and a second account logs in quickly, the logout may not have
+        // finished, and the second account would silently inherit the first
+        // account's subscription. logIn switches customers directly.
         let appUserID = userID.lowercased()
+        guard Purchases.isConfigured, Purchases.shared.appUserID != appUserID else { return }
         Task {
             do {
                 let result = try await Purchases.shared.logIn(appUserID)

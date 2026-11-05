@@ -121,3 +121,23 @@ Improvements:
 Testing Premium without paying:
 - Fastest: RevenueCat > Customers > search your account ID (Profile > Copy account ID) > Grant promotional entitlement > premium. Works for scans too.
 - Or start the free trial in TestFlight. TestFlight purchases are sandbox and never charged, but only work once both products are attached to the `premium` entitlement and the default offering in RevenueCat.
+
+## Nov 5 security + App Review audit (needs the migration applied + a new TestFlight build)
+
+Fixed:
+- [x] CRITICAL: free scan limit could be bypassed. Any signed-in user could call refund_ai_scan_for on themselves for unlimited free AI scans (real cost), or burn other users' scans. The Oct 1 revoke missed the default PUBLIC grant. New migration `20261105_security_hardening.sql` locks both functions to the edge function only
+- [x] RLS reset to a known owner-only set on every table (profiles, check_ins, food_logs, workout_logs, community_posts, community_reports, ai_scan_usage). The originals were never in the repo, so they couldn't be checked
+- [x] Community: server rejects posts over 500 chars, names over 40 chars, and names that impersonate the coach or team (Mason, Coach, Admin, Support, FTM Team...). App shows a friendly message for the same rule
+- [x] Delete account could fail for anyone whose post was ever reported (report foreign key had no cascade)
+- [x] AI consent screen before the first meal scan (Apple guideline 5.1.2(i): third-party AI disclosure, a common rejection since Nov 2025)
+- [x] RevenueCat: logging out then quickly into another account could carry the first account's Premium over
+- [x] Switching accounts on one phone now also clears the previous person's program pick, training weekdays and block list
+- [x] Privacy policy rewritten to match reality: meal photos go to OpenAI via Rork; food/workout logs and photos stay on the phone; adds RevenueCat, Open Food Facts, USDA, Quebec Law 25 / PIPEDA
+- [x] Terms + Support no longer say "free at launch"; describe Premium, free trial and cancellation
+- [x] Website renamed from TransFit to FTM (support email unchanged)
+
+Still open (you):
+- [ ] Apply the migration in Supabase (Rork: "run backend/migrations/20261105_security_hardening.sql") and confirm it ran without errors
+- [ ] Confirm support@transfit.app receives mail (or pick a new address and I'll swap it everywhere)
+- [ ] App Store Connect > App Privacy: declare Health & Fitness, Email, User ID, Photos (meal scans, not linked to you), Purchases
+- [ ] Decide: daily cap on Premium scans (e.g. 30/day) so one heavy user can't run up the AI bill. Premium is currently unlimited with no cap
