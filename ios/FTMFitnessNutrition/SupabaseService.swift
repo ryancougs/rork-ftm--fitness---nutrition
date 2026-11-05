@@ -377,6 +377,33 @@ final class SupabaseService {
             .execute()
     }
 
+    // MARK: - Feedback
+
+    nonisolated struct FeedbackInsert: Encodable, Sendable {
+        let userId: String
+        let topic: String
+        let message: String
+        let replyEmail: String?
+        let appVersion: String
+
+        enum CodingKeys: String, CodingKey {
+            case userId = "user_id"
+            case topic, message
+            case replyEmail = "reply_email"
+            case appVersion = "app_version"
+        }
+    }
+
+    /// "Help & feedback" form. Lands in the support_messages table, which is
+    /// only readable from the Supabase dashboard.
+    func sendFeedback(topic: String, message: String, replyEmail: String?) async throws {
+        guard let userID = currentUserID else { throw ServiceError.notSignedIn }
+        try await client.from("support_messages")
+            .insert(FeedbackInsert(userId: userID, topic: topic, message: message,
+                                   replyEmail: replyEmail, appVersion: AppInfo.version))
+            .execute()
+    }
+
     // MARK: - Account deletion
 
     /// Deletes the account server-side (auth user + all data via cascade).

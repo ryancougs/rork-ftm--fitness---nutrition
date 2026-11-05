@@ -124,21 +124,47 @@ struct TrainView: View {
     @ViewBuilder
     private var yourPlanSection: some View {
         if let plan = app.personalProgram {
-            TFSectionHeader(title: "Your Custom Plan", subtitle: "Built around your goal, experience, and schedule. Updates whenever your profile changes")
+            TFSectionHeader(title: "Your Custom Plan",
+                            subtitle: plan.isAIBuilt
+                                ? "Built by AI around your goals, schedule, life and body"
+                                : "Built around your goal, experience, and schedule")
                 .padding(.top, 8)
             PremiumGate(
                 requiredTier: .premium,
                 unlocked: {
-                    NavigationLink(value: plan) {
-                        ProgramRow(program: plan)
+                    VStack(spacing: 10) {
+                        if plan.isAIBuilt {
+                            if app.aiPlanNeedsRefresh {
+                                refreshBanner
+                            }
+                            NavigationLink(value: plan) {
+                                ProgramRow(program: plan)
+                            }
+                            .buttonStyle(.plain)
+                            Button {
+                                app.showPlanBuilder = true
+                            } label: {
+                                Label("Update my answers and rebuild", systemImage: "arrow.triangle.2.circlepath")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(TF.blue)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 4)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            buildPlanCard
+                            NavigationLink(value: plan) {
+                                ProgramRow(program: plan)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .buttonStyle(.plain)
                 },
                 locked: {
                     LockedFeatureCard(
                         icon: "sparkles",
-                        title: "Your custom plan",
-                        message: "Get a program built for your goal, body, schedule and equipment, adjusted by your weekly check-ins.",
+                        title: "Your AI-built plan",
+                        message: "Answer questions about your goals, schedule, job, sleep, injuries and equipment, and AI builds a program around your life.",
                         context: .programs
                     )
                 }
@@ -150,6 +176,44 @@ struct TrainView: View {
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 4)
+            }
+        }
+    }
+
+    /// Premium, but still on the starter plan: invite them into the builder.
+    private var buildPlanCard: some View {
+        TFCard(background: TF.blue.opacity(0.12)) {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Build your AI plan", systemImage: "sparkles")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(TF.blue)
+                Text("About 3 minutes of questions about your schedule, job, sleep, injuries, equipment and preferences. Then AI writes a program around all of it. Until then, the starter plan below follows your profile.")
+                    .font(.footnote)
+                    .foregroundStyle(TF.text)
+                TFButton(title: "Start the plan builder", systemImage: "arrow.right", style: .primary) {
+                    app.showPlanBuilder = true
+                }
+            }
+        }
+    }
+
+    private var refreshBanner: some View {
+        TFCard(background: TF.warning.opacity(0.12)) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Your profile changed")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(TF.text)
+                Text("Your goal, level, days or equipment no longer match this plan. Rebuild to keep it fitted to you.")
+                    .font(.footnote)
+                    .foregroundStyle(TF.textSecondary)
+                HStack(spacing: 10) {
+                    TFButton(title: "Rebuild", systemImage: "sparkles", style: .primary) {
+                        app.showPlanBuilder = true
+                    }
+                    TFButton(title: "Keep it", systemImage: nil, style: .ghost) {
+                        app.aiPlanNeedsRefresh = false
+                    }
+                }
             }
         }
     }
@@ -458,6 +522,22 @@ private struct ProgramDetailView: View {
                         }
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(TF.blue)
+                    }
+                }
+                if let notes = program.coachNotes, !notes.isEmpty {
+                    TFCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Label("Coach notes", systemImage: "lightbulb.fill")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(TF.text)
+                            ForEach(notes, id: \.self) { note in
+                                Text("• \(note)")
+                                    .font(.footnote)
+                                    .foregroundStyle(TF.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 TFSectionHeader(title: "Training days", subtitle: "\(program.days.count) days")

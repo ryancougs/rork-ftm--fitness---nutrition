@@ -65,6 +65,7 @@ struct MealScanService {
     enum MealScanError: LocalizedError {
         case notSignedIn
         case limitReached
+        case dailyLimit
         case badResponse
         case noFood
         case photoTooLarge
@@ -79,6 +80,7 @@ struct MealScanService {
             switch self {
             case .notSignedIn: "Sign in to use AI scanning. (S401)"
             case .limitReached: "You've used all 3 free scans this week. Go Premium for unlimited scanning."
+            case .dailyLimit: "You've hit today's scan limit. It resets tomorrow, and you can still search or add foods by hand. (S429D)"
             case .badResponse: "Couldn't read the scan result. Please try again. (S200)"
             case .noFood: "No food found in that photo. Try again with the whole plate in frame and good light. (S422)"
             case .photoTooLarge: "That photo was too large to send. Please try again. (S400)"
@@ -143,7 +145,10 @@ struct MealScanService {
         case 401: throw MealScanError.notSignedIn
         case 403: throw MealScanError.limitReached
         case 422: throw MealScanError.noFood
-        case 429: throw MealScanError.tooManyRequests
+        case 429:
+            // Premium has a daily cap; other 429s are the AI provider being busy.
+            let body = String(data: data, encoding: .utf8) ?? ""
+            throw body.contains("daily_limit") ? MealScanError.dailyLimit : MealScanError.tooManyRequests
         case 503: throw MealScanError.unavailable
         default:
             print("scan-meal returned \(http.statusCode): \(String(data: data, encoding: .utf8) ?? "")")

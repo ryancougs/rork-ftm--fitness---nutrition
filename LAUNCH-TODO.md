@@ -138,6 +138,26 @@ Fixed:
 
 Still open (you):
 - [ ] Apply the migration in Supabase (Rork: "run backend/migrations/20261105_security_hardening.sql") and confirm it ran without errors
-- [ ] Confirm support@transfit.app receives mail (or pick a new address and I'll swap it everywhere)
+- [x] Support email removed everywhere (Nov 5). Replaced by Profile > Help & feedback (messages land in Supabase table support_messages)
 - [ ] App Store Connect > App Privacy: declare Health & Fitness, Email, User ID, Photos (meal scans, not linked to you), Purchases
-- [ ] Decide: daily cap on Premium scans (e.g. 30/day) so one heavy user can't run up the AI bill. Premium is currently unlimited with no cap
+- [x] Premium scans capped at 25/day server-side (Nov 5)
+
+## Nov 5 (afternoon): AI training plans + limits
+
+Built:
+- [x] Premium AI plan builder: 8-step questionnaire (goals + focus areas, exact weekdays + session length + work schedule, job/sports/sleep/stress, experience + exact equipment, injuries + binding/top surgery/testosterone with "Prefer not to say", style/cardio/gym comfort/likes/dislikes), AI consent, then a plan with coach notes
+- [x] New edge function `generate-plan`: verifies Premium with RevenueCat, 5 builds/day, gpt-4.1 with gpt-4o-mini fallback, validates every field, refunds failed builds
+- [x] Safety rules in the prompt: no upper body while recovering from top surgery, never train in a binder, no hormone/medical advice, work around injuries, respect equipment and session length
+- [x] Editing goal/level/days/equipment after an AI plan shows "Rebuild" instead of silently swapping in a template
+- [x] New Premium members are invited into the builder once, right after subscribing
+- [x] Premium meal scans: 25/day cap with a clear message
+- [x] Help & feedback form replaces the support email
+- [x] Privacy policy covers AI plans and feedback messages
+
+To test on the next TestFlight build:
+- [ ] Premium account: Train > Start the plan builder > answer everything > Build. Check the days match the weekdays you picked
+- [ ] Try "Recovering (under 3 months)" for top surgery: plan should have no pressing/rows/pull-ups
+- [ ] Profile > Help & feedback: send one, confirm it shows in Supabase > support_messages
+
+Security follow-up:
+- [ ] The Rork toolkit key was added to the iOS build config as EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY, which puts it inside the app binary. Edge functions now read RORK_TOOLKIT_SECRET_KEY first. Ask Rork to keep the key out of the iOS app, and rotate the key once a build without it ships

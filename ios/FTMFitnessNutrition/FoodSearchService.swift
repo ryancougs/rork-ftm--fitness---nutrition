@@ -25,7 +25,7 @@ struct FoodSearchService {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 8
         config.timeoutIntervalForResource = 12
-        config.httpAdditionalHeaders = ["User-Agent": "TransFit/1.0 (support@transfit.app)"]
+        config.httpAdditionalHeaders = ["User-Agent": "FTMFitnessNutrition/1.0 (iOS)"]
         return URLSession(configuration: config)
     }()
 

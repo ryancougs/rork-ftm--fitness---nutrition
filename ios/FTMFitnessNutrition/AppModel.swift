@@ -68,8 +68,22 @@ final class AppModel {
     // Ready-made plans with stable ids so logged sets survive relaunches.
     var programs: [WorkoutProgram] = SampleData.programs.map { $0.stabilized(namespace: $0.name) }
 
-    /// The user's personalized program, generated on-device by the plan engine.
+    /// The user's personalized program: built by AI from the plan builder
+    /// (Premium), or by the on-device plan engine until they've done that.
     var personalProgram: WorkoutProgram? = nil
+
+    /// Answers from the Premium plan builder. Phone only.
+    var planIntake: PlanIntake? = nil
+
+    /// Opens the plan builder sheet from anywhere (Train, Profile, after
+    /// someone starts Premium).
+    var showPlanBuilder: Bool = false
+
+    /// Set when a training-relevant profile change happens after an AI plan
+    /// was built: we never silently replace an AI plan, we offer a rebuild.
+    var aiPlanNeedsRefresh: Bool = UserDefaults.standard.bool(forKey: "tf.aiPlanNeedsRefresh") {
+        didSet { UserDefaults.standard.set(aiPlanNeedsRefresh, forKey: "tf.aiPlanNeedsRefresh") }
+    }
 
     /// Starter list (household servings) merged with the bundled USDA-derived
     /// database (FoodsDatabase.json) so search covers hundreds of foods.
@@ -311,6 +325,8 @@ final class AppModel {
             customTrainingWeekdays = []
             sessionOverride = nil
             blockedUserIDs = []
+            planIntake = nil
+            aiPlanNeedsRefresh = false
         }
         profile.email = result.email ?? email
         if let userID = SupabaseService.shared.currentUserID {
@@ -348,6 +364,9 @@ final class AppModel {
         customTrainingWeekdays = []
         sessionOverride = nil
         blockedUserIDs = []
+        planIntake = nil
+        aiPlanNeedsRefresh = false
+        showPlanBuilder = false
         hasCompletedOnboarding = false
         recentFoods.removeAll()
         favoriteFoods.removeAll()
@@ -462,15 +481,51 @@ final class AppModel {
         }
         if oldGoal != profile.goal || oldExperience != profile.experience
             || oldDays != profile.daysPerWeek || oldEquipment != profile.equipment {
-            regeneratePlan()
+            if personalProgram?.isAIBuilt == true {
+                aiPlanNeedsRefresh = true
+            } else {
+                regeneratePlan()
+            }
         }
         save()
         Task { await SupabaseService.shared.syncProfile(profile) }
     }
 
-    /// Rebuild the personalized training program from the current profile.
+    /// Rebuild the rule-based program from the current profile. Never runs
+    /// over an AI-built plan; those rebuild through the plan builder.
     func regeneratePlan() {
+        guard personalProgram?.isAIBuilt != true else { return }
         personalProgram = PlanEngine.generateProgram(for: profile).stabilized(namespace: "custom")
+    }
+
+    /// Premium: build the plan with AI from the plan builder's answers. The
+    /// answers also update the profile (goal, level, job, equipment, days),
+    /// so targets and the weekly schedule match the new plan.
+    func buildAIPlan(intake: PlanIntake, goal: FitnessGoal, experience: ExperienceLevel,
+                     lifestyle: Lifestyle, equipment: EquipmentAccess, weekdays: Set<Int>) async throws {
+        var draft = profile
+        draft.goal = goal
+        draft.experience = experience
+        draft.lifestyle = lifestyle
+        draft.equipment = equipment
+        draft.daysPerWeek = weekdays.count
+        let orderedDays = Self.mondayFirst(weekdays)
+
+        let program = try await AIPlanService.shared.buildPlan(
+            profile: draft, intake: intake, weekdays: orderedDays)
+
+        // Only commit once the plan is in hand, so a failed build changes nothing.
+        let targetsChanged = draft.goal != profile.goal || draft.lifestyle != profile.lifestyle
+        profile = draft
+        if targetsChanged { profile.applyDefaultTargets() }
+        customTrainingWeekdays = orderedDays
+        planIntake = intake
+        personalProgram = program.stabilized(namespace: "ai|\(program.name)")
+        chosenProgramName = nil          // follow the new plan
+        sessionOverride = nil
+        aiPlanNeedsRefresh = false
+        save()
+        Task { await SupabaseService.shared.syncProfile(profile) }
     }
 
     /// Mason's read on the most recent check-in, if there is one.
@@ -701,6 +756,7 @@ final class AppModel {
         var hasCompletedOnboarding: Bool
         var recentFoods: [FoodItem]
         var favoriteFoods: [FoodItem]
+        var planIntake: PlanIntake? = nil
 
         init(profile: UserProfile, foodLog: [String: [LoggedFood]],
              exerciseLogs: [String: [UUID: ExerciseLog]], checkIns: [WeeklyCheckIn],
@@ -724,14 +780,16 @@ final class AppModel {
             hasCompletedOnboarding = try c.decodeIfPresent(Bool.self, forKey: .hasCompletedOnboarding) ?? false
             recentFoods = try c.decodeIfPresent([FoodItem].self, forKey: .recentFoods) ?? []
             favoriteFoods = try c.decodeIfPresent([FoodItem].self, forKey: .favoriteFoods) ?? []
+            planIntake = try? c.decodeIfPresent(PlanIntake.self, forKey: .planIntake)
         }
     }
 
     func save() {
-        let p = Persisted(profile: profile, foodLog: foodLog, exerciseLogs: exerciseLogs,
+        var p = Persisted(profile: profile, foodLog: foodLog, exerciseLogs: exerciseLogs,
                           checkIns: checkIns, personalProgram: personalProgram,
                           hasCompletedOnboarding: hasCompletedOnboarding,
                           recentFoods: recentFoods, favoriteFoods: favoriteFoods)
+        p.planIntake = planIntake
         if let data = try? JSONEncoder().encode(p) {
             try? data.write(to: storeURL, options: .atomic)
         }
@@ -749,7 +807,12 @@ final class AppModel {
         self.foodLog = p.foodLog
         self.exerciseLogs = p.exerciseLogs
         self.checkIns = p.checkIns
-        self.personalProgram = p.personalProgram?.stabilized(namespace: "custom")
+        // Rule-based plans re-stabilize under "custom"; AI plans were already
+        // stabilized when built and keep their ids as saved.
+        if let saved = p.personalProgram {
+            self.personalProgram = saved.isAIBuilt ? saved : saved.stabilized(namespace: "custom")
+        }
+        self.planIntake = p.planIntake
         self.hasCompletedOnboarding = p.hasCompletedOnboarding
             || UserDefaults.standard.bool(forKey: "tf.hasCompletedOnboarding")
         self.recentFoods = p.recentFoods

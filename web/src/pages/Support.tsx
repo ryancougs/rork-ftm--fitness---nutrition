@@ -1,19 +1,17 @@
 import LegalLayout from "@/components/LegalLayout";
 
-const SUPPORT_EMAIL = "support@transfit.app";
-
 export default function Support() {
   return (
     <LegalLayout
       title="Support"
-      updated="19 August 2026"
+      updated="5 November 2026"
       intro="Something not working, or you want to tell us what FTM is missing? We read every message. Most replies go out within two working days."
     >
       <h2>Contact us</h2>
       <p>
-        Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>. To help us fix things fast,
-        include your device model, your iOS version, and what you were doing when the problem
-        happened. Screenshots are welcome.
+        Send us a message from <strong>Profile, then Help &amp; feedback</strong> in the app. A real person reads every message, and you can choose
+        to get a reply by email. To help us fix things fast, say which screen you were on, what you
+        tapped, and any error code you saw (like S503).
       </p>
 
       <h2>Common questions</h2>
@@ -62,7 +60,7 @@ export default function Support() {
 
       <h3>I found a bug or my data looks wrong</h3>
       <p>
-        Email us with a screenshot and roughly when it happened. If data appears missing, do not
+        Tell us in Profile, then Help &amp; feedback, and include roughly when it happened. If data appears missing, do not
         delete and reinstall the app before contacting us — that can make it harder to recover.
       </p>
 

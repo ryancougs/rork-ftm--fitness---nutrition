@@ -1,7 +1,5 @@
 import LegalLayout from "@/components/LegalLayout";
 
-const SUPPORT_EMAIL = "support@transfit.app";
-
 export default function Terms() {
   return (
     <LegalLayout
@@ -98,7 +96,7 @@ export default function Terms() {
 
       <h2>Contact</h2>
       <p>
-        Questions? Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
+        Questions? Message us from <strong>Profile, then Help &amp; feedback</strong> in the app.
       </p>
     </LegalLayout>
   );

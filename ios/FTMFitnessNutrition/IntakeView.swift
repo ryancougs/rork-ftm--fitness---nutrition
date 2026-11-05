@@ -445,6 +445,7 @@ struct IntakeView: View {
                                     Label("Included with your plan", systemImage: "sparkles")
                                         .font(.headline)
                                         .foregroundStyle(TF.pink)
+                                    perkLine("sparkles", "Premium: an AI plan built around your schedule, job and body")
                                     perkLine("camera.viewfinder", "AI meal scanning: snap a photo, get the macros")
                                     perkLine("barcode.viewfinder", "Barcode scanner and food search")
                                     perkLine("chart.line.uptrend.xyaxis", "Weekly check-ins that adjust your targets")

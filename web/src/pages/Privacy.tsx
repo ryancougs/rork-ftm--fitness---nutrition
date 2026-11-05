@@ -1,6 +1,5 @@
 import LegalLayout from "@/components/LegalLayout";
 
-const SUPPORT_EMAIL = "support@transfit.app";
 const APP_NAME = "FTM: Fitness & Nutrition";
 
 export default function Privacy() {
@@ -15,6 +14,7 @@ export default function Privacy() {
         <li>We store your account email, your profile, and your weekly check-ins on our servers.</li>
         <li>Your food logs, workout logs, and progress photos stay on your phone.</li>
         <li>If you use AI meal scanning, the meal photo is sent to an AI provider to estimate calories. We don't save it.</li>
+        <li>If you build an AI training plan, your plan builder answers are sent to an AI provider to write it. We don't save them on our server.</li>
         <li>We never sell or rent your personal data, and we do not run third-party ad tracking.</li>
         <li>We do not require your legal name, gender marker, or any medical documentation.</li>
         <li>Community posts are visible to other signed-in users under a display name you choose. Your email is never shown.</li>
@@ -35,7 +35,8 @@ export default function Privacy() {
         <li>Your profile: name you entered, training goal, experience level, weekly availability, lifestyle, and equipment access</li>
         <li>Optional body stats such as height, weight, and age, plus your calorie and macro targets</li>
         <li>Weekly check-ins: energy, sleep, stress, and hunger ratings, workout adherence, and any notes you write</li>
-        <li>Your AI scan count for the current week (a number, not the photos)</li>
+        <li>How many AI scans and plan builds you've used (counts only, not photos or answers)</li>
+        <li>Messages you send us from Help &amp; feedback, and your email if you ask for a reply</li>
       </ul>
       <p>
         Some of this may be considered health-related information. We treat it accordingly: it is
@@ -82,17 +83,28 @@ export default function Privacy() {
         them before logging.
       </p>
 
-      <h2>Plan generation happens on your device</h2>
+      <h2>AI training plans (Premium)</h2>
       <p>
-        Your training and nutrition plans are built by rules running inside the app on your phone.
-        Nothing about you is sent to an AI provider to build a plan.
+        Premium members can answer a plan builder questionnaire: goals, schedule, job and work
+        hours, sleep, stress, other activities, training experience, equipment, injuries,
+        preferences, and optional questions about binding, top surgery, and testosterone (each has
+        a "Prefer not to say" option). The app asks for your permission before sending anything.
+        When you tap Build my plan, these answers plus your goal, experience level, age, height, and
+        weight are sent to our server and to an AI model from <strong>OpenAI</strong> (through
+        Rork) to write your program. Your name and email are not sent. We do not save your answers
+        on our server; they stay on your phone so you can edit them and rebuild later. Our providers
+        do not use them to train AI models.
+      </p>
+      <p>
+        Free plans and nutrition targets are still built by rules running inside the app, without
+        any AI provider.
       </p>
 
       <h2>How we use your information</h2>
       <ul>
         <li>To provide the core app: your profile, targets, check-ins, and programs.</li>
-        <li>To estimate the nutrition in meal photos you choose to scan.</li>
-        <li>To manage your subscription and the free weekly scan allowance.</li>
+        <li>To estimate the nutrition in meal photos you choose to scan, and to write your AI training plan if you ask for one.</li>
+        <li>To manage your subscription and the free and daily AI limits.</li>
         <li>To keep the community feed safe: reviewing reported posts and enforcing the community guidelines.</li>
         <li>To respond to you when you contact support.</li>
       </ul>
@@ -105,7 +117,7 @@ export default function Privacy() {
       <p>We use a small number of providers to run the service:</p>
       <ul>
         <li><strong>Supabase</strong>: database hosting, authentication, and community feed storage.</li>
-        <li><strong>Rork and OpenAI</strong>: AI meal scan estimates (meal photo only, not saved by us).</li>
+        <li><strong>Rork and OpenAI</strong>: AI meal scan estimates and AI training plans (the photo or your plan answers only, not saved by us).</li>
         <li><strong>RevenueCat</strong>: subscription status. It receives an anonymous account ID and your purchase history from Apple, not your email.</li>
         <li><strong>Apple</strong>: app distribution and payment processing. Apple handles all payment details; we never see your card information.</li>
         <li><strong>Open Food Facts and USDA FoodData Central</strong>: food search and barcode lookups. They receive the search text or barcode, not your identity.</li>
@@ -119,8 +131,8 @@ export default function Privacy() {
         database, and clears the data stored on your phone. Encrypted backups roll off within 30 days.
       </p>
       <p>
-        You may also email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> to request access
-        to, correction of, or deletion of your data. We respond within 30 days.
+        You can also ask for a copy, correction, or deletion of your data from <strong>Profile, then Help &amp; feedback</strong> in the app. We
+        respond within 30 days.
       </p>
 
       <h2>Your rights</h2>
@@ -128,8 +140,7 @@ export default function Privacy() {
         Depending on where you live, including under the UK GDPR, EU GDPR, Quebec Law 25, PIPEDA, and
         the CCPA, you may have the right to access, correct, export, delete, or restrict processing
         of your personal data, and to object to certain processing. We do not sell personal
-        information as defined under the CCPA. To exercise any of these rights, email{" "}
-        <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
+        information as defined under the CCPA. To exercise any of these rights, message us from <strong>Profile, then Help &amp; feedback</strong> in the app.
       </p>
 
       <h2>Security</h2>
@@ -153,7 +164,7 @@ export default function Privacy() {
 
       <h2>Contact</h2>
       <p>
-        Questions about privacy? Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
+        Questions about privacy? Message us from <strong>Profile, then Help &amp; feedback</strong> in the app.
       </p>
     </LegalLayout>
   );

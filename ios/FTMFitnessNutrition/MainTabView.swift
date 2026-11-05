@@ -41,6 +41,22 @@ struct MainTabView: View {
             PaywallView(context: .postOnboarding)
                 .onAppear { store.markAutoPaywallShown() }
         }
+        // Premium plan builder, opened from Train, Profile, or right after
+        // someone starts Premium.
+        .sheet(isPresented: $app.showPlanBuilder) {
+            PlanBuilderView()
+        }
+        // New Premium member who hasn't built an AI plan: invite them once,
+        // after any paywall sheet has closed.
+        .task(id: store.isPremium && !app.showPostOnboardingPaywall) {
+            guard store.isPremium, !app.showPostOnboardingPaywall,
+                  app.personalProgram?.isAIBuilt != true,
+                  !UserDefaults.standard.bool(forKey: "tf.planBuilderInvited") else { return }
+            try? await Task.sleep(for: .seconds(0.8))
+            guard !Task.isCancelled, store.isPremium else { return }
+            UserDefaults.standard.set(true, forKey: "tf.planBuilderInvited")
+            app.showPlanBuilder = true
+        }
         // Ask for notification permission once the user is in the app and
         // no paywall is covering it, instead of on the launch splash.
         .task(id: app.showPostOnboardingPaywall) {

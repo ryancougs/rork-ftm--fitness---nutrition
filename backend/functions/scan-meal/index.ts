@@ -11,6 +11,8 @@
 //     service-role RPC.
 //  4. Call the Rork AI proxy (vision, gpt-4o-mini) and parse up to 8 foods.
 //  5. On any AI failure (or "no food found"), refund the consumed scan.
+//  Premium is "unlimited" in the app, with a quiet daily cap
+//  (PREMIUM_DAILY_SCANS) so one account can't run up the AI bill.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const TOOLKIT_URL = "https://toolkit.rork.com";
@@ -18,6 +20,7 @@ const MAX_IMAGE_BASE64 = 3_000_000; // ~2.2 MB binary, plenty for a plate photo
 const AI_TIMEOUT_MS = 55_000; // stay under Supabase's edge function limit
 
 const PREMIUM_ENTITLEMENTS = ["premium", "premium_plus", "ftm_pro"];
+const PREMIUM_DAILY_SCANS = 25;
 
 const PROMPT = `You are a nutrition estimator inside a fitness app. Look at the meal photo. \
 Identify each distinct food item and estimate its calories (kcal) and \
@@ -96,9 +99,24 @@ Deno.serve(async (req) => {
   // with the lowercased user UUID, so that's the app_user_id here.
   const premium = await isPremium(user.id);
   let consumed = false;
+  let consumedDaily = false;
   let remainingAfter: number | null = null;
 
-  if (!premium) {
+  if (premium) {
+    const { data: left, error } = await admin.rpc("consume_ai_daily", {
+      p_user_id: user.id,
+      p_kind: "scan",
+      p_limit: PREMIUM_DAILY_SCANS,
+    });
+    if (error) {
+      // Never block a paying member because the counter hiccuped.
+      console.error("consume_ai_daily failed:", error);
+    } else if (left === -1) {
+      return json(429, { error: "daily_limit", limit: PREMIUM_DAILY_SCANS });
+    } else {
+      consumedDaily = true;
+    }
+  } else {
     const { data: remaining, error } = await admin.rpc("consume_ai_scan_for", {
       p_user_id: user.id,
     });
@@ -120,6 +138,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error("analyzeImage failed:", err);
     if (consumed) await refund(admin, user.id);
+    if (consumedDaily) await refundDaily(admin, user.id);
     const message = err instanceof ToolkitError ? err : null;
     if (message?.status === 429) {
       return json(429, { error: "too_many_requests" });
@@ -131,6 +150,7 @@ Deno.serve(async (req) => {
   if (foods.length === 0) {
     // The model saw no food — give the scan back.
     if (consumed) await refund(admin, user.id);
+    if (consumedDaily) await refundDaily(admin, user.id);
     return json(422, { error: "no_food" });
   }
 
@@ -151,7 +171,9 @@ class ToolkitError extends Error {
 }
 
 async function analyzeImage(imageBase64: string): Promise<string> {
-  const secret = Deno.env.get("EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY");
+  // Prefer the server-only name; the EXPO_PUBLIC_ name is the legacy one.
+  const secret = Deno.env.get("RORK_TOOLKIT_SECRET_KEY") ??
+    Deno.env.get("EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY");
   if (!secret) {
     throw new ToolkitError(500, "toolkit secret not configured");
   }
@@ -295,11 +317,24 @@ function isPremium(userID: string): Promise<boolean> {
 }
 
 async function refund(
-  admin: ReturnType<typeof createClient>,
+  // deno-lint-ignore no-explicit-any
+  admin: any,
   userID: string,
 ): Promise<void> {
   const { error } = await admin.rpc("refund_ai_scan_for", {
     p_user_id: userID,
   });
   if (error) console.error("refund_ai_scan_for failed:", error);
+}
+
+async function refundDaily(
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+  userID: string,
+): Promise<void> {
+  const { error } = await admin.rpc("refund_ai_daily", {
+    p_user_id: userID,
+    p_kind: "scan",
+  });
+  if (error) console.error("refund_ai_daily failed:", error);
 }

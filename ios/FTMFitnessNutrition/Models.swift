@@ -180,11 +180,18 @@ struct WorkoutProgram: Identifiable, Codable, Equatable, Hashable {
     var goal: FitnessGoal
     var daysPerWeek: Int
     var days: [WorkoutDay]
+    /// Coach notes from the AI plan builder (progression, rough weeks, safety).
+    /// Nil for rule-based and ready-made plans, so it doubles as the
+    /// "built by AI" marker.
+    var coachNotes: [String]? = nil
+
+    var isAIBuilt: Bool { coachNotes != nil }
 
     init(id: UUID = UUID(), name: String, summary: String, level: ExperienceLevel,
-         goal: FitnessGoal, daysPerWeek: Int, days: [WorkoutDay]) {
+         goal: FitnessGoal, daysPerWeek: Int, days: [WorkoutDay], coachNotes: [String]? = nil) {
         self.id = id; self.name = name; self.summary = summary; self.level = level
         self.goal = goal; self.daysPerWeek = daysPerWeek; self.days = days
+        self.coachNotes = coachNotes
     }
 }
 
@@ -235,7 +242,7 @@ extension WorkoutProgram {
         return WorkoutProgram(
             id: .stable("\(namespace)|program"),
             name: name, summary: summary, level: level, goal: goal,
-            daysPerWeek: daysPerWeek, days: newDays
+            daysPerWeek: daysPerWeek, days: newDays, coachNotes: coachNotes
         )
     }
 }

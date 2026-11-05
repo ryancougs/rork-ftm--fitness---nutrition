@@ -624,7 +624,7 @@ struct ComposePostSheet: View {
         // The display name shows on every post, so it gets the same check.
         let lowered = (text + " " + name).lowercased()
         if Self.blockedTerms.contains(where: { lowered.contains($0) }) {
-            error = "Please rephrase — this space stays supportive, and that language doesn't fit it. Reach support@transfit.app if you think this is a mistake."
+            error = "Please rephrase — this space stays supportive, and that language doesn't fit it. If you think this is a mistake, tell us in Profile > Help & feedback."
             return
         }
         if Self.isReservedName(name) {

@@ -15,6 +15,7 @@ struct ProfileView: View {
     @State private var showingEditProfile = false
     @State private var showingEditTargets = false
     @State private var showingPrivacy = false
+    @State private var showingFeedback = false
     @State private var showingAbout = false
     @State private var showingDeleteConfirmation = false
     @State private var showingDeleteError = false
@@ -53,6 +54,11 @@ struct ProfileView: View {
             .sheet(isPresented: $showingEditTargets) {
                 EditTargetsSheet()
                     .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $showingFeedback) {
+                FeedbackSheet()
+                    .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $showingPrivacy) {
@@ -407,6 +413,10 @@ struct ProfileView: View {
                         }
                     }
                     Divider().padding(.leading, 48)
+                    settingsRow(icon: "bubble.left.and.text.bubble.right.fill", title: "Help & feedback", color: TF.blue) {
+                        showingFeedback = true
+                    }
+                    Divider().padding(.leading, 48)
                     settingsRow(icon: "shield.fill", title: "Privacy", color: TF.blue) {
                         showingPrivacy = true
                     }
@@ -417,7 +427,12 @@ struct ProfileView: View {
                 }
             }
             TFButton(title: "Rebuild my training plan", systemImage: "arrow.triangle.2.circlepath", style: .secondary) {
-                showingRebuildConfirmation = true
+                // Premium rebuilds go through the AI plan builder.
+                if store.isPremium {
+                    app.showPlanBuilder = true
+                } else {
+                    showingRebuildConfirmation = true
+                }
             }
             .padding(.top, 8)
             .confirmationDialog("Rebuild your training plan?", isPresented: $showingRebuildConfirmation, titleVisibility: .visible) {
@@ -551,7 +566,6 @@ struct PrivacySheet: View {
     @Environment(\.dismiss) private var dismiss
 
     private let policyURL = URL(string: "https://2gxfo9qxolcyjgbzbeaoj-web.rork.live/privacy")!
-    private let supportURL = URL(string: "mailto:support@transfit.app")!
 
     var body: some View {
         NavigationStack {
@@ -570,24 +584,16 @@ struct PrivacySheet: View {
                     TFCard {
                         VStack(alignment: .leading, spacing: 12) {
                             privacyPoint("person.crop.circle", "What we store",
-                                         "Account email, display name, and the fitness and wellbeing data you log — workouts, food, check-ins.")
+                                         "Account email, your profile and weekly check-ins. Meal photos and AI plan answers are sent to OpenAI only to build your estimate or plan, and aren't saved by us.")
                             privacyPoint("lock.shield", "How it's protected",
-                                         "Passwords are hashed. Data is encrypted in transit and at rest, and plan generation happens on your device.")
+                                         "Passwords are hashed. Data is encrypted in transit and at rest. Food logs, workout logs and progress photos stay on your phone.")
                             privacyPoint("trash", "Your control",
-                                         "You can delete everything yourself — Profile → Delete account — or email us and we'll handle it within 30 days.")
+                                         "You can delete everything yourself in Profile > Delete account, or ask us in Profile > Help & feedback and we'll handle it within 30 days.")
                         }
                     }
                     VStack(spacing: 10) {
                         Link(destination: policyURL) {
                             Label("Read the full Privacy Policy", systemImage: "safari")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(TF.blue)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(Capsule().fill(TF.blue.opacity(0.18)))
-                        }
-                        Link(destination: supportURL) {
-                            Label("Email support@transfit.app", systemImage: "envelope")
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(TF.blue)
                                 .frame(maxWidth: .infinity)

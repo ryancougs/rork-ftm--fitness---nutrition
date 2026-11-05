@@ -150,7 +150,7 @@ extension PaywallContext {
         message: "Set your own calorie and macro targets.")
     static let programs = PaywallContext(
         headline: "Your custom plan is part of Premium",
-        message: "Get a program built for your goal, schedule and equipment, adjusted by your weekly check-ins. Ready-made plans stay free.")
+        message: "Answer questions about your goals, schedule, job, sleep, injuries and equipment, and AI builds a program around your life. Ready-made plans stay free.")
     static let fullHistory = PaywallContext(
         headline: "30 and 90 day trends are part of Premium",
         message: "See your calorie and protein averages across the last month and quarter.")
@@ -159,7 +159,7 @@ extension PaywallContext {
         message: "Go unlimited with Premium — plus the barcode scanner and custom goals.")
     static let postOnboarding = PaywallContext(
         headline: "You're all set up",
-        message: "Premium unlocks unlimited AI meal scans, the barcode scanner, and custom goals. Free logging stays free — no ads, ever.")
+        message: "Premium unlocks an AI-built training plan, unlimited AI meal scans, the barcode scanner, and custom goals. Free logging stays free, no ads, ever.")
     static let coachUpdates = PaywallContext(
         headline: "Mason's premium updates are part of Premium",
         message: "Unlock every locked coach update, plus unlimited AI meal scans and the barcode scanner.")

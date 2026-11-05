@@ -297,11 +297,11 @@ struct PaywallContentView: View {
 
     private var featureList: [String] {
         [
+            "AI training plan built around your life",
             "Unlimited AI meal scans",
             "Barcode scanner + quick-add macros",
             "Custom calorie & macro goals",
             "30 and 90 day nutrition trends",
-            "Your custom training plan, adjusted weekly",
         ]
     }
 
