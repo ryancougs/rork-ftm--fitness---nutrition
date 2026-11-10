@@ -16,7 +16,11 @@ extension Date {
         let cal = Calendar.current
         if cal.isDateInToday(self) { return "Today" }
         if cal.isDateInYesterday(self) { return "Yesterday" }
-        let dayDiff = cal.dateComponents([.day], from: self, to: Date()).day ?? 0
+        // Count calendar days, not 24-hour blocks: a post from two evenings
+        // ago read "1 days ago" the next morning.
+        let dayDiff = cal.dateComponents([.day], from: cal.startOfDay(for: self),
+                                         to: cal.startOfDay(for: Date())).day ?? 0
+        if dayDiff < 2 { return "Yesterday" }
         if dayDiff < 7 { return "\(dayDiff) days ago" }
         if dayDiff < 14 { return "Last week" }
         let weekDiff = dayDiff / 7

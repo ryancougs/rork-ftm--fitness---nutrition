@@ -182,6 +182,8 @@ final class AppModel {
 
     /// "60 kg" / "135 lbs" with no trailing .0
     func weightLabel(fromKg kg: Double) -> String {
+        // Sets logged with no weight are bodyweight sets (push-ups, pull-ups).
+        if kg <= 0 { return "Bodyweight" }
         let v = (displayWeight(fromKg: kg) * 10).rounded() / 10
         let text = v == v.rounded() ? String(Int(v)) : String(format: "%.1f", v)
         return "\(text) \(weightUnit.label)"
@@ -268,10 +270,24 @@ final class AppModel {
     /// Consumed by MainTabView; never re-shown for the same completion.
     var showPostOnboardingPaywall: Bool = false
 
+    /// The calendar day the screens were last drawn for. The app often stays
+    /// open in the background overnight; refreshDay() bumps this when it
+    /// comes back on a new day so every "today" screen redraws.
+    private(set) var dayStamp: String = ""
+
+    func refreshDay() {
+        let now = Self.dateKey(Date())
+        if now != dayStamp { dayStamp = now }
+    }
+
     // Today's date key
-    var todayKey: String { Self.dateKey(Date()) }
+    var todayKey: String {
+        _ = dayStamp
+        return Self.dateKey(Date())
+    }
 
     init() {
+        dayStamp = Self.dateKey(Date())
         load()
         // The cloud session is the source of truth; handleAppLaunch() resolves it.
     }
@@ -295,6 +311,10 @@ final class AppModel {
         if result.needsEmailConfirmation {
             throw SupabaseService.AuthError.emailConfirmationRequired
         }
+        // A new account never inherits what the last person on this phone
+        // logged. Without this their food, workouts and check-ins showed up
+        // in the new account, and the check-ins were later uploaded to it.
+        resetLocalAccountData()
         var p = UserProfile()
         p.name = name
         p.email = email
@@ -309,26 +329,17 @@ final class AppModel {
 
     func logIn(email: String, password: String) async throws {
         let result = try await SupabaseService.shared.signIn(email: email, password: password)
+        await finishSignIn(email: result.email ?? email)
+    }
+
+    /// Shared tail of every sign-in (password, or a password reset code):
+    /// start fresh if it's a different account, then pull the cloud profile.
+    func finishSignIn(email: String) async {
         // A different account signing in on this device starts fresh locally.
-        if profile.email.caseInsensitiveCompare(result.email ?? email) != .orderedSame {
-            profile = UserProfile()
-            checkIns.removeAll()
-            foodLog.removeAll()
-            exerciseLogs.removeAll()
-            personalProgram = nil
-            hasCompletedOnboarding = false
-            recentFoods.removeAll()
-            favoriteFoods.removeAll()
-            // Per-person settings too, so the new account doesn't inherit the
-            // last person's program pick, weekdays or block list.
-            chosenProgramName = nil
-            customTrainingWeekdays = []
-            sessionOverride = nil
-            blockedUserIDs = []
-            planIntake = nil
-            aiPlanNeedsRefresh = false
+        if profile.email.caseInsensitiveCompare(email) != .orderedSame {
+            resetLocalAccountData()
         }
-        profile.email = result.email ?? email
+        profile.email = email
         if let userID = SupabaseService.shared.currentUserID {
             StoreService.shared.identify(userID: userID)
         }
@@ -350,15 +361,33 @@ final class AppModel {
         if SupabaseService.shared.currentUserID != nil {
             try await SupabaseService.shared.deleteAccount()
         }
+        // The account is gone on the server; drop the saved login too.
+        // Otherwise the next launch restored the dead session and dropped
+        // the person into onboarding for an account that no longer exists.
+        await SupabaseService.shared.signOut()
         StoreService.shared.reset()
         wipeLocalData()
     }
 
     private func wipeLocalData() {
+        resetLocalAccountData()
+        showPlanBuilder = false
+        selectedTab = .home
+        showPostOnboardingPaywall = false
+        session = .unauthenticated
+        save()
+    }
+
+    /// Clears everything that belongs to one person: their logs, plan,
+    /// check-ins and photos, and their per-person settings. Used when an
+    /// account is deleted and whenever a different account takes over this
+    /// phone (log in or sign up).
+    private func resetLocalAccountData() {
         profile = UserProfile()
         foodLog.removeAll()
         exerciseLogs.removeAll()
         checkIns.removeAll()
+        deleteAllCheckInPhotos()
         personalProgram = nil
         chosenProgramName = nil
         customTrainingWeekdays = []
@@ -366,38 +395,41 @@ final class AppModel {
         blockedUserIDs = []
         planIntake = nil
         aiPlanNeedsRefresh = false
-        showPlanBuilder = false
         hasCompletedOnboarding = false
         recentFoods.removeAll()
         favoriteFoods.removeAll()
-        selectedTab = .home
-        showPostOnboardingPaywall = false
-        session = .unauthenticated
-        save()
+        UserDefaults.standard.removeObject(forKey: "tf.planBuilderInvited")
+        UserDefaults.standard.removeObject(forKey: "tf.aiScanConsent")
     }
 
     /// Merge the cloud profile and check-ins into local state after sign-in
     /// or session restore. Local logs (food/workout) remain device-local in v1.
     private func restoreFromCloud() async {
-        guard let row = await SupabaseService.shared.fetchProfile() else {
-            // Offline or missing row: fall back to local state. The onboarding
-            // flag guards against cloud hiccups bouncing users back to intake.
-            if !profile.email.isEmpty {
-                session = (profile.name.isEmpty && !hasCompletedOnboarding) ? .needsIntake : .ready
-            } else {
-                session = hasCompletedOnboarding ? .ready : .needsIntake
-            }
+        let row: SupabaseService.ProfileRow?
+        switch await SupabaseService.shared.fetchProfileResult() {
+        case .failed:
+            // Offline or a server hiccup: go by what this phone knows. Only
+            // the onboarding flag counts. A name alone isn't proof (sign-up
+            // saves the name before onboarding starts), and using it let
+            // people skip onboarding and the trial offer by reopening the app.
+            session = hasCompletedOnboarding ? .ready : .needsIntake
             return
+        case .missing:
+            row = nil
+        case .found(let found):
+            row = found
         }
 
-        if let name = row.name, !name.isEmpty {
-            profile.name = name
+        // The cloud row only gets a name once onboarding is finished.
+        let cloudName = row?.name ?? ""
+        if let row, !cloudName.isEmpty {
+            profile.name = cloudName
             if let email = row.email { profile.email = email }
             if let g = row.goal, let goal = FitnessGoal(rawValue: g) { profile.goal = goal }
             if let e = row.experience, let exp = ExperienceLevel(rawValue: e) { profile.experience = exp }
             if let ls = row.lifestyle, let l = Lifestyle(rawValue: ls) { profile.lifestyle = l }
             if let eq = row.equipment, let eqAccess = EquipmentAccess(rawValue: eq) { profile.equipment = eqAccess }
-            if let d = row.daysPerWeek { profile.daysPerWeek = d }
+            if let d = row.daysPerWeek, (2...6).contains(d) { profile.daysPerWeek = d }
             if let bw = row.bodyweightKg { profile.bodyweightKg = bw }
             if let h = row.heightCm { profile.heightCm = h }
             if let a = row.age { profile.age = a }
@@ -405,12 +437,18 @@ final class AppModel {
             if let p = row.targetProtein { profile.targetProtein = p }
             if let cb = row.targetCarbs { profile.targetCarbs = cb }
             if let f = row.targetFat { profile.targetFat = f }
-        } else if let email = row.email {
-            // Account exists but intake was never completed on any device.
-            profile.email = email
+            hasCompletedOnboarding = true
+        } else {
+            if let email = row?.email, profile.email.isEmpty { profile.email = email }
+            if hasCompletedOnboarding, !profile.name.isEmpty {
+                // Onboarding was finished on this phone but the profile never
+                // reached the server (no signal at the time). Send it now so
+                // it isn't lost on a new phone.
+                await SupabaseService.shared.syncProfile(profile)
+            }
         }
 
-        if personalProgram == nil, !profile.name.isEmpty {
+        if personalProgram == nil, hasCompletedOnboarding {
             regeneratePlan()
         }
 
@@ -443,8 +481,7 @@ final class AppModel {
 
         // A completed cloud profile (or the local flag) means intake is done:
         // never bounce returning users back to onboarding.
-        if !profile.name.isEmpty { hasCompletedOnboarding = true }
-        session = (profile.name.isEmpty && !hasCompletedOnboarding) ? .needsIntake : .ready
+        session = hasCompletedOnboarding ? .ready : .needsIntake
     }
 
     func completeIntake(goal: FitnessGoal, experience: ExperienceLevel, daysPerWeek: Int,
@@ -468,15 +505,24 @@ final class AppModel {
     }
 
     func updateProfile(_ mutation: (inout UserProfile) -> Void) {
+        let old = profile
         let oldGoal = profile.goal
         let oldExperience = profile.experience
         let oldDays = profile.daysPerWeek
         let oldLifestyle = profile.lifestyle
         let oldEquipment = profile.equipment
+        let hadRecommendedTargets = Self.hasRecommendedTargets(old)
         mutation(&profile)
         // Goal or lifestyle changes recompute fueling targets (they feed the
         // activity math); any training-relevant change rebuilds the program.
         if oldGoal != profile.goal || oldLifestyle != profile.lifestyle {
+            profile.applyDefaultTargets()
+        } else if hadRecommendedTargets,
+                  old.bodyweightKg != profile.bodyweightKg || old.heightCm != profile.heightCm
+                    || old.age != profile.age || oldDays != profile.daysPerWeek {
+            // Weight, height, age and training days feed the calorie math
+            // too. Updating them used to leave the targets stale. Targets
+            // someone set by hand (Premium) are left alone.
             profile.applyDefaultTargets()
         }
         if oldGoal != profile.goal || oldExperience != profile.experience
@@ -489,6 +535,13 @@ final class AppModel {
         }
         save()
         Task { await SupabaseService.shared.syncProfile(profile) }
+    }
+
+    /// True while the saved targets are the recommended ones, not hand-edited.
+    private static func hasRecommendedTargets(_ p: UserProfile) -> Bool {
+        let t = PlanEngine.targets(for: p)
+        return p.targetCalories == t.calories && p.targetProtein == t.protein
+            && p.targetCarbs == t.carbs && p.targetFat == t.fat
     }
 
     /// Rebuild the rule-based program from the current profile. Never runs
@@ -516,6 +569,7 @@ final class AppModel {
 
         // Only commit once the plan is in hand, so a failed build changes nothing.
         let targetsChanged = draft.goal != profile.goal || draft.lifestyle != profile.lifestyle
+            || (Self.hasRecommendedTargets(profile) && draft.daysPerWeek != profile.daysPerWeek)
         profile = draft
         if targetsChanged { profile.applyDefaultTargets() }
         customTrainingWeekdays = orderedDays
@@ -537,6 +591,7 @@ final class AppModel {
     /// Today's session from the personalized plan, spread across the user's
     /// preferred training weekdays. Nil on rest days.
     var todayWorkout: WorkoutDay? {
+        _ = dayStamp
         if let picked = overriddenTodayDay { return picked }
         guard let program = activeProgram,
               !program.days.isEmpty else { return nil }
@@ -688,11 +743,13 @@ final class AppModel {
 
     func saveCheckIn(_ checkIn: WeeklyCheckIn) {
         if let idx = checkIns.firstIndex(where: { $0.weekStart.isSameDay(as: checkIn.weekStart) }) {
+            if checkIns[idx].id != checkIn.id { removeCheckInPhotos(for: checkIns[idx]) }
             checkIns[idx] = checkIn
         } else {
             checkIns.append(checkIn)
         }
         checkIns.sort { $0.weekStart > $1.weekStart }
+        writeCheckInPhotos(for: checkIn)
         save()
         Task { await SupabaseService.shared.syncCheckIn(checkIn) }
     }
@@ -784,9 +841,70 @@ final class AppModel {
         }
     }
 
+    // MARK: - Check-in photos (files next to the state file)
+    //
+    // Photos used to live inside the state JSON, which is rewritten on every
+    // logged set and food. A few months of weekly photos made each save
+    // re-encode many megabytes on the main thread. They now sit in their own
+    // files and are only written when a check-in is saved.
+
+    private var checkInPhotoDirectory: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("checkin_photos", isDirectory: true)
+    }
+
+    private func checkInPhotoURL(_ id: UUID, _ slot: String) -> URL {
+        checkInPhotoDirectory.appendingPathComponent("\(id.uuidString)-\(slot).jpg")
+    }
+
+    private func writeCheckInPhotos(for checkIn: WeeklyCheckIn) {
+        let fm = FileManager.default
+        try? fm.createDirectory(at: checkInPhotoDirectory, withIntermediateDirectories: true)
+        let photos: [(String, Data?)] = [
+            ("front", checkIn.frontPhoto), ("side", checkIn.sidePhoto),
+            ("back", checkIn.backPhoto), ("pose", checkIn.posePhoto),
+        ]
+        for (slot, data) in photos {
+            let url = checkInPhotoURL(checkIn.id, slot)
+            if let data {
+                try? data.write(to: url, options: .atomic)
+            } else {
+                try? fm.removeItem(at: url)
+            }
+        }
+    }
+
+    private func removeCheckInPhotos(for checkIn: WeeklyCheckIn) {
+        for slot in ["front", "side", "back", "pose"] {
+            try? FileManager.default.removeItem(at: checkInPhotoURL(checkIn.id, slot))
+        }
+    }
+
+    private func deleteAllCheckInPhotos() {
+        try? FileManager.default.removeItem(at: checkInPhotoDirectory)
+    }
+
+    private func loadingCheckInPhotos(_ checkIn: WeeklyCheckIn) -> WeeklyCheckIn {
+        var c = checkIn
+        c.frontPhoto = try? Data(contentsOf: checkInPhotoURL(c.id, "front"))
+        c.sidePhoto = try? Data(contentsOf: checkInPhotoURL(c.id, "side"))
+        c.backPhoto = try? Data(contentsOf: checkInPhotoURL(c.id, "back"))
+        c.posePhoto = try? Data(contentsOf: checkInPhotoURL(c.id, "pose"))
+        return c
+    }
+
+    private static func strippingPhotos(_ checkIn: WeeklyCheckIn) -> WeeklyCheckIn {
+        var c = checkIn
+        c.frontPhoto = nil
+        c.sidePhoto = nil
+        c.backPhoto = nil
+        c.posePhoto = nil
+        return c
+    }
+
     func save() {
         var p = Persisted(profile: profile, foodLog: foodLog, exerciseLogs: exerciseLogs,
-                          checkIns: checkIns, personalProgram: personalProgram,
+                          checkIns: checkIns.map { Self.strippingPhotos($0) }, personalProgram: personalProgram,
                           hasCompletedOnboarding: hasCompletedOnboarding,
                           recentFoods: recentFoods, favoriteFoods: favoriteFoods)
         p.planIntake = planIntake
@@ -806,7 +924,19 @@ final class AppModel {
         self.profile = p.profile
         self.foodLog = p.foodLog
         self.exerciseLogs = p.exerciseLogs
-        self.checkIns = p.checkIns
+        // Older builds kept photos inside the state file: move those out
+        // once. Everything else reads its photos back from disk.
+        var movedPhotos = false
+        self.checkIns = p.checkIns.map { saved -> WeeklyCheckIn in
+            let hasInlinePhotos = saved.frontPhoto != nil || saved.sidePhoto != nil
+                || saved.backPhoto != nil || saved.posePhoto != nil
+            if hasInlinePhotos {
+                writeCheckInPhotos(for: saved)
+                movedPhotos = true
+                return saved
+            }
+            return loadingCheckInPhotos(saved)
+        }
         // Rule-based plans re-stabilize under "custom"; AI plans were already
         // stabilized when built and keep their ids as saved.
         if let saved = p.personalProgram {
@@ -817,5 +947,6 @@ final class AppModel {
             || UserDefaults.standard.bool(forKey: "tf.hasCompletedOnboarding")
         self.recentFoods = p.recentFoods
         self.favoriteFoods = p.favoriteFoods
+        if movedPhotos { save() }
     }
 }

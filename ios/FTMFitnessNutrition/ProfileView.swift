@@ -468,7 +468,9 @@ struct ProfileView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This permanently removes your profile, workouts, food logs, and check-ins from this device and our servers. This can't be undone.")
+                Text(store.isPremium
+                     ? "This permanently removes your profile, workouts, food logs, and check-ins from this device and our servers. This can't be undone.\n\nDeleting your account does not cancel your Premium subscription. Cancel it first in Settings > Apple Account > Subscriptions, or Apple keeps billing you."
+                     : "This permanently removes your profile, workouts, food logs, and check-ins from this device and our servers. This can't be undone.")
             }
             .alert("Couldn't delete your account", isPresented: $showingDeleteError) {
                 Button("OK", role: .cancel) {}
@@ -909,6 +911,11 @@ struct EditTargetsSheet: View {
     @State private var protein: String = ""
     @State private var carbs: String = ""
     @State private var fat: String = ""
+    @State private var error: String? = nil
+
+    /// Lowest daily calorie target the app will save. Below this, a target
+    /// should come from a healthcare provider, not a fitness app.
+    private static let minimumCalories = 1200
 
     var body: some View {
         NavigationStack {
@@ -942,7 +949,17 @@ struct EditTargetsSheet: View {
                             .foregroundStyle(TF.blue)
                     }
                     .buttonStyle(.plain)
+                    if let error {
+                        Text(error)
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(TF.warning)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                     TFButton(title: "Save targets", systemImage: "checkmark", style: .primary) {
+                        if let c = Int(calories), c < Self.minimumCalories {
+                            error = "Daily calories can't be set below \(Self.minimumCalories). If you need a lower target, set it with your doctor or dietitian."
+                            return
+                        }
                         app.updateProfile { p in
                             if let c = Int(calories), c > 0 { p.targetCalories = c }
                             if let pr = Int(protein), pr > 0 { p.targetProtein = pr }

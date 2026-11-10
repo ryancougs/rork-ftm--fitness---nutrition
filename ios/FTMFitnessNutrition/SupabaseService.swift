@@ -100,6 +100,26 @@ final class SupabaseService {
         try await client.auth.resetPasswordForEmail(email)
     }
 
+    /// Password reset, step 2: check the code from the reset email. On
+    /// success the person is signed in, so the new password can be set.
+    /// The reset is finished inside the app because the link in the email
+    /// can only be completed on a web page, and there isn't one.
+    func verifyPasswordResetCode(email: String, code: String) async throws {
+        _ = try await client.auth.verifyOTP(email: email, token: code, type: .recovery)
+        let session = try await client.auth.session
+        currentUserID = session.user.id.uuidString
+    }
+
+    /// Password reset, step 3: save the new password for the signed-in user.
+    func setNewPassword(_ password: String) async throws -> AuthResult {
+        _ = try await client.auth.update(user: UserAttributes(password: password))
+        let session = try await client.auth.session
+        currentUserID = session.user.id.uuidString
+        return AuthResult(userID: session.user.id.uuidString,
+                          email: session.user.email,
+                          needsEmailConfirmation: false)
+    }
+
     // MARK: - Profile sync
 
     nonisolated struct ProfileUpsert: Encodable, Sendable {
@@ -190,6 +210,32 @@ final class SupabaseService {
             try await client.from("profiles").upsert(payload).execute()
         } catch {
             print("Profile sync failed: \(error)")
+        }
+    }
+
+    nonisolated enum ProfileFetch: Sendable {
+        case found(ProfileRow)
+        case missing   // signed in, but no profile row yet
+        case failed    // offline or a server error: nothing learned
+    }
+
+    /// Like fetchProfile, but tells "no row" apart from "couldn't reach the
+    /// server", so a network blip is never mistaken for a brand-new account.
+    func fetchProfileResult() async -> ProfileFetch {
+        guard let userID = currentUserID else { return .failed }
+        do {
+            let rows: [ProfileRow] = try await client
+                .from("profiles")
+                .select()
+                .eq("id", value: userID)
+                .limit(1)
+                .execute()
+                .value
+            if let row = rows.first { return .found(row) }
+            return .missing
+        } catch {
+            print("Profile fetch failed: \(error)")
+            return .failed
         }
     }
 
@@ -416,6 +462,9 @@ final class SupabaseService {
 
     nonisolated static func dateKey(_ date: Date) -> String {
         let f = DateFormatter()
+        // Fixed Gregorian calendar, matching AppModel.dateKey, so keys stay
+        // the same on phones set to another calendar.
+        f.calendar = Calendar(identifier: .gregorian)
         f.dateFormat = "yyyy-MM-dd"
         f.locale = Locale(identifier: "en_US_POSIX")
         return f.string(from: date)
@@ -423,6 +472,9 @@ final class SupabaseService {
 
     nonisolated static func date(fromKey key: String) -> Date? {
         let f = DateFormatter()
+        // Fixed Gregorian calendar, matching AppModel.dateKey, so keys stay
+        // the same on phones set to another calendar.
+        f.calendar = Calendar(identifier: .gregorian)
         f.dateFormat = "yyyy-MM-dd"
         f.locale = Locale(identifier: "en_US_POSIX")
         return f.date(from: key)
@@ -451,7 +503,13 @@ extension SupabaseService {
         if raw.contains("at least") && raw.contains("password") {
             return "That password is too easy to guess — use at least 6 characters."
         }
-        if raw.contains("rate limit") {
+        if raw.contains("token has expired") || raw.contains("link is invalid") || raw.contains("otp") {
+            return "That code is wrong or has expired. Check the latest email, or send a new code."
+        }
+        if raw.contains("different from the old password") {
+            return "That's your current password. Pick a new one."
+        }
+        if raw.contains("rate limit") || raw.contains("security purposes") {
             return "Too many attempts in a row. Give it a minute and try again."
         }
         if raw.contains("network") || raw.contains("connection") || raw.contains("offline") {

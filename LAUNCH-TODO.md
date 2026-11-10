@@ -161,3 +161,65 @@ To test on the next TestFlight build:
 
 Security follow-up:
 - [ ] The Rork toolkit key was added to the iOS build config as EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY, which puts it inside the app binary. Edge functions now read RORK_TOOLKIT_SECRET_KEY first. Ask Rork to keep the key out of the iOS app, and rotate the key once a build without it ships
+
+## Nov 10: launch-blocker sweep (needs a new TestFlight build + two backend steps)
+
+Read every Swift file, both AI functions and all four migrations. Fixed:
+
+Accounts and sign-in
+- [x] Forgot password never worked: the email link needs a web page to finish, and there isn't one. Reset now happens in the app: email, then the code from the email plus a new password. **Needs the email template change below**
+- [x] A new account created on a phone someone else had used inherited that person's food log, workouts and check-ins, and the check-ins were later uploaded to the new account
+- [x] Closing the app during onboarding and reopening skipped onboarding and the trial offer
+- [x] Delete account left the dead login saved; next launch dropped the person into onboarding for a deleted account
+- [x] Delete account now warns Premium members that it doesn't cancel the subscription (Apple asks for this)
+- [x] Onboarding finished with no signal: the profile is now sent on the next launch instead of never
+- [x] Sign-up shows "By creating an account you agree to Terms and Privacy" (expected for apps with a community)
+
+Paywall
+- [x] Annual plan line read `That's Optional("$8.33")/month`
+- [x] "Start free trial" showed even to someone who already used their trial (they'd be charged right away). The app now asks the App Store first
+- [x] Restore said "Restore complete" even when the App Store couldn't be reached
+
+Nutrition
+- [x] App left open overnight: Nutrition stayed on yesterday, so breakfast went into the wrong day. Home and Train also showed yesterday until something else refreshed them
+- [x] Amount 0 logged an empty item; the total shown and the amount logged could differ
+- [x] After subscribing from the "free scans used" card, the card stayed up instead of opening the camera
+- [x] Food search fired on every keystroke. Open Food Facts allows about 10 searches a minute and blocks apps that go over; search now waits for a pause
+
+Train
+- [x] Bodyweight exercises couldn't be logged without typing a weight. Leave weight empty and it logs "Bodyweight x reps"
+
+Profile
+- [x] Changing weight, height, age or training days never updated the calorie targets, despite the screen saying they would. They update now unless the targets were set by hand
+- [x] Custom calorie target can't be saved below 1,200
+
+Check-in
+- [x] Progress photos were saved at 2700 px instead of 900 px (same 3x bug the meal scanner had)
+- [x] Photos lived inside the main save file, which is rewritten on every set and food logged. After a few months that's many MB per tap. Photos are now separate files; existing ones move over on first launch
+
+Community
+- [x] Blocking someone now also sends a report to moderation (Apple's rule: a block must reach the developer)
+- [x] "1 days ago" on posts
+- [x] Mason's supplements post was Premium-locked but only said the details were "inside the Prep Team". Reworded and unlocked. **Have Mason check the new wording**
+
+AI functions (redeploy needed)
+- [x] Top surgery recovery: the plan builder now strips any upper-body exercise from the plan itself and always adds the surgeon-clearance note, instead of trusting the AI to follow the rule
+- [x] Billing grace period (failed renewal) no longer drops a paying member to free on the server
+- [x] Scan results: negative or absurd numbers from the AI are clamped
+
+App Store
+- [x] iPhone was allowed to rotate to landscape, where the tab bar and camera break. Portrait only now
+- [x] App is now iPhone-only. It was set to iPhone + iPad, which means iPad screenshots, an iPad layout Apple reviews, and no way to drop iPad after the first release. iPad users can still install it. Say the word if you want iPad back
+- [x] Website: removed "Free at launch", "email us", and "premium coaching content"
+
+Your steps:
+- [ ] Supabase > Authentication > Emails > Reset Password: put the code in the email. Body:
+      `<h2>Reset your FTM password</h2><p>Enter this code in the app:</p><p style="font-size:24px"><strong>{{ .Token }}</strong></p><p>It expires in 1 hour. If you didn't ask for this, ignore this email.</p>`
+- [ ] Redeploy `generate-plan` and `scan-meal` (Rork: "deploy the backend functions")
+- [ ] New TestFlight build, then test: forgot password, sign up a second account on the same phone, log a bodyweight set, change your weight in Profile and watch the targets move
+- [ ] Decide on a support email. Apple requires a Support URL where people can reach you, and the page currently only points to the in-app form, which someone locked out of their account can't open
+
+Still open from before:
+- [ ] RevenueCat: both products attached to `premium` entitlement and the default offering
+- [ ] The AI key still ships inside the app (EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY in the iOS build config). Ask Rork to remove it from the iOS app, then rotate it
+- [ ] App Store Connect > App Privacy answers

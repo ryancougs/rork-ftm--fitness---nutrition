@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
   for (const [model, timeout] of [[PRIMARY_MODEL, 75_000], [FALLBACK_MODEL, 45_000]] as const) {
     try {
       const content = await chat(model, prompt, timeout);
-      plan = cleanPlan(content, answers.daysPerWeek);
+      plan = cleanPlan(content, answers.daysPerWeek, isRecoveringFromTopSurgery(answers));
       if (plan) break;
       console.error(`${model} returned an unusable plan`);
     } catch (err) {
@@ -308,7 +308,7 @@ async function chat(model: string, prompt: string, timeoutMs: number): Promise<s
       ],
       response_format: { type: "json_object" },
       temperature: 0.4,
-      max_tokens: 4000,
+      max_tokens: 6000,
     }),
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -356,7 +356,27 @@ function text(v: unknown, max: number): string {
   return typeof v === "string" ? v.replaceAll("— ", "").replace(/\s+/g, " ").trim().slice(0, max) : "";
 }
 
-function cleanPlan(content: string, daysPerWeek: number): Plan | null {
+// Safety net for top surgery recovery. The prompt already tells the model to
+// leave the upper body out, but a model can slip, and this is the one rule
+// where a slip could hurt someone. So anything that is clearly upper-body
+// work is removed here no matter what the model wrote.
+const UPPER_BODY_GROUP =
+  /(chest|pec|back|lat|shoulder|delt|trap|arm|bicep|tricep|forearm|upper)/i;
+const UPPER_BODY_MOVE =
+  /(bench|push[- ]?ups?|pull[- ]?ups?|chin[- ]?ups?|pull[- ]?downs?|pullover|\bdips?\b|\brows?\b|rowing|rower|overhead|shoulder press|chest press|military press|arnold|lateral raise|front raise|rear delt|face pull|fl(y|ye|ies|yes)\b|shrug|bicep|tricep|skull ?crusher|hammer curl|preacher|battle rope|burpee|farmer|goblet|hang(ing)?\b|plank|crawl)/i;
+
+function isRecoveringFromTopSurgery(a: Answers): boolean {
+  return a.topSurgery.toLowerCase().startsWith("recovering");
+}
+
+function isUpperBody(e: PlanExercise): boolean {
+  return UPPER_BODY_GROUP.test(e.muscleGroup) || UPPER_BODY_MOVE.test(e.name);
+}
+
+const SURGERY_NOTE =
+  "Upper-body training is left out while you recover from top surgery. Add it back only when your surgeon clears you, and start light.";
+
+function cleanPlan(content: string, daysPerWeek: number, recovering = false): Plan | null {
   let parsed: unknown;
   try {
     const start = content.indexOf("{");
@@ -389,6 +409,14 @@ function cleanPlan(content: string, daysPerWeek: number): Plan | null {
         cue: text(e.cue, 300),
       });
     }
+    if (recovering) {
+      const safe = exercises.filter((e) => !isUpperBody(e));
+      if (safe.length !== exercises.length) {
+        console.error(`removed ${exercises.length - safe.length} upper-body exercises from a recovery plan`);
+      }
+      exercises.length = 0;
+      exercises.push(...safe);
+    }
     if (exercises.length < 2) return null;
     // Titles keep the app's "Day N — Name" format even if the model drifts.
     const rawTitle = typeof d.title === "string" ? d.title.trim() : "";
@@ -401,9 +429,13 @@ function cleanPlan(content: string, daysPerWeek: number): Plan | null {
   }
   if (days.length !== daysPerWeek) return null;
 
-  const notes = Array.isArray(p.notes)
+  let notes = Array.isArray(p.notes)
     ? (p.notes as unknown[]).map((n) => text(n, 300)).filter(Boolean).slice(0, 6)
     : [];
+  if (recovering) {
+    // Always first, whatever the model wrote.
+    notes = [SURGERY_NOTE, ...notes].slice(0, 6);
+  }
 
   return {
     name: text(p.name, 50) || "Your AI Plan",
@@ -435,8 +467,14 @@ async function isPremium(userID: string): Promise<boolean> {
     return Object.entries(entitlements)
       .filter(([id]) => PREMIUM_ENTITLEMENTS.includes(id))
       .some(([, ent]) => {
-        const expires = (ent as { expires_date?: string }).expires_date;
-        return !expires || new Date(expires).getTime() > Date.now();
+        const e = ent as { expires_date?: string | null; grace_period_expires_date?: string | null };
+        if (!e.expires_date) return true; // lifetime
+        // A failed renewal gets a grace period from Apple; still Premium.
+        const until = Math.max(
+          new Date(e.expires_date).getTime(),
+          e.grace_period_expires_date ? new Date(e.grace_period_expires_date).getTime() : 0,
+        );
+        return until > Date.now();
       });
   } catch (err) {
     console.error("RevenueCat check failed:", err);

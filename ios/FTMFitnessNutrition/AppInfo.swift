@@ -10,6 +10,9 @@ import Foundation
 enum AppInfo {
     nonisolated static let name = "FTM: Fitness & Nutrition"
 
+    nonisolated static let termsURL = URL(string: "https://2gxfo9qxolcyjgbzbeaoj-web.rork.live/terms")!
+    nonisolated static let privacyURL = URL(string: "https://2gxfo9qxolcyjgbzbeaoj-web.rork.live/privacy")!
+
     nonisolated static var version: String {
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String ?? "1.0"

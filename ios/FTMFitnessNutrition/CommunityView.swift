@@ -105,6 +105,12 @@ struct CommunityView: View {
                 Button("Block", role: .destructive) {
                     if let post = blockingPost {
                         app.block(userID: post.userId)
+                        // Apple's rule for community apps: a block also has
+                        // to reach the moderators, not only hide the posts.
+                        Task {
+                            try? await SupabaseService.shared.reportCommunityPost(
+                                postId: post.id, reason: "Blocked by a member")
+                        }
                     }
                     blockingPost = nil
                 }
@@ -593,6 +599,10 @@ struct ComposePostSheet: View {
                     }
                     TFButton(title: "Post to the community", systemImage: "paperplane.fill",
                              style: .primary, isLoading: isPosting, disabled: !canPost, action: post)
+                    Text("Posts follow the community guidelines and our Terms of Use. No harassment, hate, or medical and dosage advice. Posts that break them are removed.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.horizontal, 18)
                 .padding(.vertical, 16)

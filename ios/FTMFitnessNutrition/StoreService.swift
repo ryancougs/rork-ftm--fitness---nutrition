@@ -59,6 +59,11 @@ final class StoreService {
     var canShowAutoPaywall: Bool { isConfigured && !isPremium && !hasShownAutoPaywallThisSession }
     func markAutoPaywallShown() { hasShownAutoPaywallThisSession = true }
 
+    /// Products whose free trial this Apple ID has already used. The paywall
+    /// must not promise "free trial" for these: the App Store charges them
+    /// right away.
+    private(set) var trialUsedProductIDs: Set<String> = []
+
     private var infoStreamTask: Task<Void, Never>?
 
     private init() {}
@@ -96,6 +101,16 @@ final class StoreService {
         } catch {
             print("Offerings load failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Asks the App Store whether this Apple ID can still get the free trial.
+    func loadTrialEligibility() async {
+        guard Purchases.isConfigured else { return }
+        let ids = [premiumMonthlyPackage, premiumAnnualPackage]
+            .compactMap { $0?.storeProduct.productIdentifier }
+        guard !ids.isEmpty else { return }
+        let result = await Purchases.shared.checkTrialOrIntroDiscountEligibility(productIdentifiers: ids)
+        trialUsedProductIDs = Set(result.filter { $0.value.status == .ineligible }.keys)
     }
 
     // MARK: Packages

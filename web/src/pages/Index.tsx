@@ -54,7 +54,7 @@ export default function Index() {
           />
           <div className="relative mx-auto max-w-3xl px-6 py-24 text-center">
             <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-primary">
-              Free at launch
+              Free to start
             </span>
             <h1 className="mt-7 text-4xl font-bold leading-[1.08] tracking-tight text-foreground sm:text-6xl">
               The only FTM fitness

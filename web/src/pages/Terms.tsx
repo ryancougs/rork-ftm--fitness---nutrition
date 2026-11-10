@@ -60,8 +60,8 @@ export default function Terms() {
       <h2>Free and paid content</h2>
       <p>
         FTM has a free version and an optional FTM Premium subscription (monthly or annual) that
-        unlocks custom training plans, unlimited AI meal scans, full history, and premium coaching
-        content. The price, duration, and renewal terms are shown before you buy. New subscribers
+        unlocks an AI-built training plan, unlimited AI meal scans (a fair-use daily cap applies), the
+        barcode scanner, custom goals, and 30 and 90 day trends. The price, duration, and renewal terms are shown before you buy. New subscribers
         may get a free trial; unless you cancel at least 24 hours before the trial ends, the
         subscription starts and you are charged. Subscriptions purchased through the App Store are billed by Apple and renew
         automatically until cancelled; you can manage or cancel them in your Apple account settings.

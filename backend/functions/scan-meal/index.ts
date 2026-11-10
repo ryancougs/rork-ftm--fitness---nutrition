@@ -257,7 +257,9 @@ function parseFoods(content: string): ScannedFood[] {
     if (typeof raw !== "object" || raw === null) continue;
     const row = raw as Record<string, unknown>;
     foods.push({
-      name: typeof row.name === "string" ? row.name : "Unknown item",
+      name: typeof row.name === "string" && row.name.trim()
+        ? row.name.trim().slice(0, 80)
+        : "Unknown item",
       calories: number(row.calories),
       protein: number(row.protein),
       carbs: number(row.carbs),
@@ -267,13 +269,13 @@ function parseFoods(content: string): ScannedFood[] {
   return foods;
 }
 
+// Models occasionally return a negative or absurd number. Keep every value
+// inside a range a single plate could plausibly have.
 function number(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "number") return 0;
-  if (typeof value === "string") {
-    return Number.parseFloat(value.replace(",", ".")) || 0;
-  }
-  return 0;
+  let n = 0;
+  if (typeof value === "number" && Number.isFinite(value)) n = value;
+  else if (typeof value === "string") n = Number.parseFloat(value.replace(",", ".")) || 0;
+  return Math.min(5000, Math.max(0, n));
 }
 
 function isPremium(userID: string): Promise<boolean> {
@@ -305,9 +307,14 @@ function isPremium(userID: string): Promise<boolean> {
       return Object.entries(entitlements)
         .filter(([id]) => PREMIUM_ENTITLEMENTS.includes(id))
         .some(([, ent]) => {
-          const expires = (ent as { expires_date?: string }).expires_date;
-          if (!expires) return true; // lifetime entitlement
-          return new Date(expires).getTime() > Date.now();
+          const e = ent as { expires_date?: string | null; grace_period_expires_date?: string | null };
+          if (!e.expires_date) return true; // lifetime entitlement
+          // A failed renewal gets a grace period from Apple; still Premium.
+          const until = Math.max(
+            new Date(e.expires_date).getTime(),
+            e.grace_period_expires_date ? new Date(e.grace_period_expires_date).getTime() : 0,
+          );
+          return until > Date.now();
         });
     })
     .catch((err) => {

@@ -19,8 +19,8 @@ export default function Support() {
       <h3>Is FTM free?</h3>
       <p>
         Yes, the core tracking features are free, including ready-made training plans and 3 AI meal
-        scans a week. FTM Premium adds custom training plans, unlimited scans, full history, and
-        Mason's premium coaching content, with a free trial for new members. The price is always
+        scans a week. FTM Premium adds an AI-built training plan, unlimited scans (a fair-use daily cap applies),
+        the barcode scanner, custom goals and 30 and 90 day trends, with a free trial for new members. The price is always
         shown before you pay, and you can cancel any time in your Apple account settings.
       </p>
 
@@ -34,7 +34,7 @@ export default function Support() {
       <h3>How do I delete my account and data?</h3>
       <p>
         Open <strong>Profile → Delete account</strong> in the app. This permanently removes your
-        profile, workout logs, food logs, and check-ins. You can also email us and we will handle it
+        profile, workout logs, food logs, and check-ins. You can also ask us in Profile, then Help &amp; feedback, and we will handle it
         within 30 days.
       </p>
 

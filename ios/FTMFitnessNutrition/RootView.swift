@@ -8,6 +8,7 @@ import SwiftUI
 /// Top-level view that gates between auth, intake, and the main app.
 struct RootView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         @Bindable var app = app
@@ -30,6 +31,11 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: app.isRestoringSession)
         .task { await app.handleAppLaunch() }
+        // The app usually stays open in the background overnight. When it
+        // comes back, make sure "today" really is today.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { app.refreshDay() }
+        }
     }
 
     /// Brief branded splash while the cloud session restores at launch.

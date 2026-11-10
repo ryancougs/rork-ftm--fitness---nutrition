@@ -54,6 +54,7 @@ struct PaywallContentView: View {
     @State private var errorMessage: String?
     @State private var showError: Bool = false
     @State private var showRestoreResult: Bool = false
+    @State private var restoreFailed: Bool = false
 
     // MARK: Package resolution
 
@@ -85,7 +86,8 @@ struct PaywallContentView: View {
         guard let package = selectedPackage else { return nil }
         let product = package.storeProduct
         guard let intro = product.introductoryDiscount,
-              intro.paymentMode == .freeTrial else { return nil }
+              intro.paymentMode == .freeTrial,
+              !store.trialUsedProductIDs.contains(product.productIdentifier) else { return nil }
         let value = intro.subscriptionPeriod.value
         let unitWord: String
         switch intro.subscriptionPeriod.unit {
@@ -141,6 +143,7 @@ struct PaywallContentView: View {
         .task {
             if store.currentOffering == nil { await store.loadOffering() }
             await store.refreshEntitlements()
+            await store.loadTrialEligibility()
             pickDefaultsIfNeeded()
         }
         .alert("Something went wrong", isPresented: $showError) {
@@ -148,12 +151,14 @@ struct PaywallContentView: View {
         } message: {
             Text(errorMessage ?? "Please try again.")
         }
-        .alert("Restore complete", isPresented: $showRestoreResult) {
+        .alert("Restore purchases", isPresented: $showRestoreResult) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(store.isPremium
-                 ? "Welcome back — \(store.tier.displayName) is active on this Apple ID."
-                 : "No previous subscription was found on this Apple ID.")
+            Text(restoreFailed
+                 ? "Couldn't reach the App Store. Check your connection and try again."
+                 : (store.isPremium
+                    ? "Welcome back. \(store.tier.displayName) is active on this Apple ID."
+                    : "No previous subscription was found on this Apple ID."))
         }
     }
 
@@ -257,7 +262,7 @@ struct PaywallContentView: View {
                         .foregroundStyle(TF.textSecondary)
                 }
             }
-            if period == .annual, let package {
+            if period == .annual, let package, !perMonthCaption(package).isEmpty {
                 Text(perMonthCaption(package))
                     .font(.caption2)
                     .foregroundStyle(TF.textSecondary)
@@ -289,10 +294,11 @@ struct PaywallContentView: View {
 
     private func perMonthCaption(_ package: Package) -> String {
         let product = package.storeProduct
-        if product.subscriptionPeriod?.unit == .year {
-            return "That's \(product.localizedPricePerMonth)/month"
-        }
-        return ""
+        // The per-month price is optional in RevenueCat; printing it straight
+        // into the text showed up as "That's Optional("$8.33")/month".
+        let perMonth: String? = product.localizedPricePerMonth
+        guard product.subscriptionPeriod?.unit == .year, let perMonth else { return "" }
+        return "That's \(perMonth)/month"
     }
 
     private var featureList: [String] {
@@ -341,7 +347,7 @@ struct PaywallContentView: View {
         Button {
             isRestoring = true
             Task { @MainActor in
-                await store.restore()
+                restoreFailed = !(await store.restore())
                 isRestoring = false
                 showRestoreResult = true
             }
@@ -372,7 +378,7 @@ struct PaywallContentView: View {
                 if store.isPremium {
                     onPurchased()
                 } else {
-                    errorMessage = "The purchase went through but your plan hasn't activated yet. Try \"Restore purchases\". If it still doesn't show, contact support."
+                    errorMessage = "The purchase went through but your plan hasn't activated yet. Try \"Restore purchases\". If it still doesn't show, tell us in Profile > Help & feedback."
                     showError = true
                 }
             case .cancelled:

@@ -78,6 +78,13 @@ struct NutritionView: View {
             }
         }
         .overlay(alignment: .bottom) { undoBar }
+        // New day since this screen was last used (the app stayed open
+        // overnight): jump back to today. It used to stay on yesterday, so
+        // this morning's breakfast was logged to the wrong day.
+        .onChange(of: app.dayStamp) { _, _ in
+            lastDeleted = nil
+            selectedDate = Calendar.current.startOfDay(for: Date())
+        }
     }
 
     // MARK: Undo
@@ -989,7 +996,7 @@ struct AddFoodSheet: View {
         searchTask?.cancel()
         scanNotice = nil
         let q = trimmedQuery
-        guard q.count >= 2 else {
+        guard q.count >= 3 else {
             remoteResults = []
             failedSources = []
             hasSearchedRemote = false
@@ -998,7 +1005,10 @@ struct AddFoodSheet: View {
         }
         isSearching = true
         searchTask = Task {
-            try? await Task.sleep(for: .milliseconds(300))
+            // Open Food Facts allows about 10 searches a minute per person
+            // and asks apps not to search on every keystroke, so wait for a
+            // real pause in typing.
+            try? await Task.sleep(for: .milliseconds(700))
             guard !Task.isCancelled else { return }
             await runSearch(q)
         }
@@ -1028,7 +1038,7 @@ struct AddFoodSheet: View {
         if let food = await FoodSearchService.shared.lookupBarcode(code) {
             select(food)
         } else {
-            scanNotice = "No product found for that barcode. Try searching by name."
+            scanNotice = "Couldn't find that barcode. Check your connection, or search by name."
         }
         isSearching = false
     }
@@ -1094,7 +1104,8 @@ struct AddFoodSheet: View {
                 portionCard(food)
                 mealPicker
                 summaryCard(food)
-                TFButton(title: "Add to log", systemImage: "plus.circle.fill", style: .primary) {
+                TFButton(title: "Add to log", systemImage: "plus.circle.fill", style: .primary,
+                         disabled: quantity <= 0) {
                     addToLog(food)
                 }
             }
@@ -1295,6 +1306,7 @@ struct AddFoodSheet: View {
     }
 
     private func addToLog(_ food: FoodItem) {
+        guard quantity > 0 else { return }
         if food.isPer100g, let grams = totalGrams {
             // A logged item's calories are food.calories × servings, and
             // food.calories describes one listed serving (servingGrams), or
@@ -1309,7 +1321,8 @@ struct AddFoodSheet: View {
                 on: date
             )
         } else {
-            app.addFood(food, servings: max(quantity, 0.5), meal: meal, on: date)
+            // Log exactly what the "This adds" card shows.
+            app.addFood(food, servings: quantity, meal: meal, on: date)
         }
         dismiss()
     }
@@ -1360,7 +1373,8 @@ struct AddFoodSheet: View {
                     }
                 }
                 mealPicker
-                TFButton(title: "Add to log", systemImage: "plus.circle.fill", style: .primary) {
+                TFButton(title: "Add to log", systemImage: "plus.circle.fill", style: .primary,
+                         disabled: !customFoodIsValid) {
                     addCustomFood()
                 }
             }
@@ -1449,10 +1463,10 @@ struct AddFoodSheet: View {
                     }
                 }
                 mealPicker
-                TFButton(title: "Add to log", systemImage: "plus.circle.fill", style: .primary) {
+                TFButton(title: "Add to log", systemImage: "plus.circle.fill", style: .primary,
+                         disabled: !quickAddIsValid) {
                     addQuickAdd()
                 }
-                .disabled(!quickAddIsValid)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 16)

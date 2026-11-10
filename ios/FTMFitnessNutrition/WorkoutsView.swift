@@ -319,11 +319,13 @@ struct InlineExerciseCard: View {
                     } label: {
                         Image(systemName: "plus.circle.fill")
                             .font(.title2)
-                            .foregroundStyle(weightInput.isEmpty || repsInput.isEmpty ? TF.blue.opacity(0.3) : TF.blue)
+                            .foregroundStyle(repsInput.isEmpty ? TF.blue.opacity(0.3) : TF.blue)
                             .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
-                    .disabled(weightInput.isEmpty || repsInput.isEmpty)
+                    // Weight can stay empty: that logs a bodyweight set
+                    // (push-ups, pull-ups, the whole bodyweight plan).
+                    .disabled(repsInput.isEmpty)
                 }
 
                 // Logged sets
@@ -371,9 +373,9 @@ struct InlineExerciseCard: View {
             Text("Last time (\(last.date.formatted(.dateTime.month(.abbreviated).day()))): \(summary)")
                 .lineLimit(2)
             Spacer(minLength: 0)
-            if let best, weightInput.isEmpty {
+            if let best, weightInput.isEmpty, repsInput.isEmpty {
                 Button("Use") {
-                    weightInput = Self.trimmed(app.displayWeight(fromKg: best.weight))
+                    weightInput = best.weight > 0 ? Self.trimmed(app.displayWeight(fromKg: best.weight)) : ""
                     repsInput = String(best.reps)
                 }
                 .font(.caption.weight(.bold))
@@ -429,7 +431,9 @@ struct InlineExerciseCard: View {
     }
 
     private func logSet() {
-        guard let w = Double(weightInput.replacingOccurrences(of: ",", with: ".")),
+        let weightText = weightInput.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
+        // No weight entered means a bodyweight set, stored as 0.
+        guard let w = weightText.isEmpty ? 0 : Double(weightText),
               let r = Int(repsInput), r > 0, w >= 0 else { return }
         app.addSet(toExercise: exercise.id, weight: app.kg(fromDisplay: w), reps: r)
         // Keep the weight for the next set; clear reps.

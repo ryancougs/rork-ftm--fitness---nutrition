@@ -428,7 +428,12 @@ struct CheckInContent: View {
         let maxSide: CGFloat = 900
         let scale = min(1, maxSide / max(image.size.width, image.size.height))
         let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-        let rendered = UIGraphicsImageRenderer(size: size).image { _ in
+        // Render at 1x. The default uses the screen scale (3x on most
+        // iPhones), which saved 2700 px photos instead of 900 px ones and
+        // made every weekly photo about nine times bigger than intended.
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let rendered = UIGraphicsImageRenderer(size: size, format: format).image { _ in
             image.draw(in: CGRect(origin: .zero, size: size))
         }
         return rendered.jpegData(compressionQuality: 0.55)

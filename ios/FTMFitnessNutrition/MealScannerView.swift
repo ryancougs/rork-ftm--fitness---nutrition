@@ -62,6 +62,13 @@ struct MealScannerView: View {
             }
         }
         .task { await checkPermission() }
+        // Subscribed from the "free scans used" card: move on to the camera
+        // instead of leaving the upgrade card on screen.
+        .onChange(of: store.isPremium) { _, isPremium in
+            guard isPremium, case .limitReached = phase else { return }
+            phase = .checkingPermission
+            Task { await checkPermission() }
+        }
     }
 
     // MARK: Camera

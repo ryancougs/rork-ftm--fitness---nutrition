@@ -351,11 +351,10 @@ enum SampleData {
             date: postDate("2026-10-10")
         ),
         CoachUpdate(
-            title: "Supplements Mason Recommends",
-            body: "Before anything else: food first. No supplement out-trains sleep, protein, or consistency. Inside the Prep Team I break down the short list I actually stand behind — how to read a label, what the research supports, and what to skip so you don't waste money. Always loop in your doctor before adding anything, especially if you're on hormone therapy.",
+            title: "Supplements: Food First",
+            body: "Before anything else: food first. No supplement out-trains sleep, protein, or consistency. If you do add something, keep the list short, read the label, and skip anything that promises miracles. Always loop in your doctor before adding anything, especially if you're on hormone therapy.",
             category: .nutrition,
-            date: postDate("2026-10-07"),
-            isPremium: true
+            date: postDate("2026-10-07")
         ),
     ]
 
