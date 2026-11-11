@@ -286,9 +286,13 @@ struct ForgotPasswordSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    switch step {
-                    case .email: emailStep
-                    case .code: codeStep
+                    if !AppInfo.selfServePasswordReset {
+                        contactStep
+                    } else {
+                        switch step {
+                        case .email: emailStep
+                        case .code: codeStep
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -311,6 +315,40 @@ struct ForgotPasswordSheet: View {
         }
         .onAppear {
             if email.isEmpty { email = prefilledEmail }
+        }
+    }
+
+    /// Shown while self-serve reset is off: a person resets the password by hand.
+    private var contactStep: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "envelope.circle.fill")
+                .font(.system(size: 44))
+                .foregroundStyle(TF.blue)
+            Text("We'll reset it for you")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(TF.text)
+            Text("Email us from the address you signed up with and we'll send you a temporary password, usually within a day.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            if let url = URL(string: "mailto:\(AppInfo.supportEmail)?subject=FTM%20password%20reset") {
+                Link(destination: url) {
+                    Label("Email \(AppInfo.supportEmail)", systemImage: "paperplane.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(RoundedRectangle(cornerRadius: TF.cornerS).fill(TF.blue))
+                        .foregroundStyle(.white)
+                }
+            }
+            Button("Copy email address") {
+                UIPasteboard.general.string = AppInfo.supportEmail
+                notice = "Copied."
+            }
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(TF.blue)
+            .buttonStyle(.plain)
+            messages
         }
     }
 

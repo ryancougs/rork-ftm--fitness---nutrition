@@ -13,6 +13,10 @@ export default function Support() {
         to get a reply by email. To help us fix things fast, say which screen you were on, what you
         tapped, and any error code you saw (like S503).
       </p>
+      <p>
+        Can't sign in, or don't have the app handy? Email us at{" "}
+        <a href="mailto:ryan.coughlin@hotmail.com">ryan.coughlin@hotmail.com</a>.
+      </p>
 
       <h2>Common questions</h2>
 

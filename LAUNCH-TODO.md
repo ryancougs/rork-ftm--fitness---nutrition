@@ -162,6 +162,23 @@ To test on the next TestFlight build:
 Security follow-up:
 - [ ] The Rork toolkit key was added to the iOS build config as EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY, which puts it inside the app binary. Edge functions now read RORK_TOOLKIT_SECRET_KEY first. Ask Rork to keep the key out of the iOS app, and rotate the key once a build without it ships
 
+## Nov 11: backend caught up + support email
+
+Found: live Supabase was behind the code. generate-plan was never deployed, scan-meal was a month old, and the Nov 5 + Nov 6 migrations had never run (no support_messages table). Premium plans and Help & feedback would have failed on TestFlight.
+
+Done (directly in the Supabase dashboard):
+- [x] Ran 20261105_security_hardening.sql (success)
+- [x] Ran 20261106_ai_daily_limits_and_feedback.sql (success)
+- [x] Deployed scan-meal (25/day Premium cap, clamped numbers, grace period)
+- [x] Created + deployed generate-plan. Both functions answer
+- [x] Support email: ryan.coughlin@hotmail.com on the Support page (for people locked out)
+
+Password reset, decided Nov 11:
+- Supabase free plan without custom SMTP can't edit email templates and only delivers to the project team, so the reset code flow can't work yet
+- For now "Forgot password" says email us; reset by hand in Supabase > Authentication > Users > the user > Send password recovery or set a temporary password
+- [ ] At launch: buy a domain, set up custom SMTP (e.g. Resend), paste the code template below, then set `AppInfo.selfServePasswordReset = true`
+- [ ] At launch: upgrade Supabase to Pro (Ryan's call)
+
 ## Nov 10: launch-blocker sweep (needs a new TestFlight build + two backend steps)
 
 Read every Swift file, both AI functions and all four migrations. Fixed:
