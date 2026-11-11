@@ -173,6 +173,16 @@ Done (directly in the Supabase dashboard):
 - [x] Created + deployed generate-plan. Both functions answer
 - [x] Support email: ryan.coughlin@hotmail.com on the Support page (for people locked out)
 
+App Store Connect, Nov 11:
+- [x] RevenueCat already correct: premium_monthly + premium_annual on `ftm_pro` and the default offering ($rc_monthly / $rc_annual). App and server both read ftm_pro as Premium
+- [x] Premium Monthly "Missing Metadata" was availability: now all 175 regions (matches Annual)
+- [x] Privacy Policy URL set
+- [x] App Privacy answers filled: Name, Email, Health, Fitness, Other User Content, User ID, Purchase History (linked, app functionality); Photos (not linked). No tracking. **Not published yet**
+- [ ] Ryan: accept the updated Apple Developer Program License Agreement (developer.apple.com/account)
+- [ ] Ryan: EU trader status (or remove EU from availability)
+- [ ] Each subscription needs a review screenshot of the paywall (from the new TestFlight build)
+- [ ] 1.0 listing: screenshots, description, keywords, Support URL (/support), copyright, build, reviewer sign-in
+
 Password reset, decided Nov 11:
 - Supabase free plan without custom SMTP can't edit email templates and only delivers to the project team, so the reset code flow can't work yet
 - For now "Forgot password" says email us; reset by hand in Supabase > Authentication > Users > the user > Send password recovery or set a temporary password
